@@ -1,0 +1,12 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+.env
+.env.*
+
+__pycache__/
+*.pyc
+
+settings.local.json

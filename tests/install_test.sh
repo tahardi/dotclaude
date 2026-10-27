@@ -31,7 +31,8 @@ test_desktop_links_files() {
 		"settings/desktop.json:settings.json" \
 		"skills/card:skills/card" \
 		"skills/project:skills/project" \
-		"skills/refine:skills/refine"; do
+		"skills/refine:skills/refine" \
+		"skills/retro:skills/retro"; do
 		src=$repo/${pair%%:*}
 		dst=$claude_dir/${pair#*:}
 		[[ "$(readlink "$dst")" == "$src" ]] || { fail "${FUNCNAME[0]}" "$dst does not link to $src"; return; }
@@ -75,6 +76,8 @@ test_desktop_fresh_dir() {
 
 	[[ "$(readlink "$fresh_dir/skills/card")" == "$repo/skills/card" ]] ||
 		{ fail "${FUNCNAME[0]}" "card not linked in fresh dir"; return; }
+	[[ "$(readlink "$fresh_dir/skills/retro")" == "$repo/skills/retro" ]] ||
+		{ fail "${FUNCNAME[0]}" "retro not linked in fresh dir"; return; }
 	[[ ! -e "$fresh_dir/dotclaude-backup" ]] || { fail "${FUNCNAME[0]}" "backup made with nothing to replace"; return; }
 
 	echo "PASS ${FUNCNAME[0]}"

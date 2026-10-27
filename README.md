@@ -5,7 +5,7 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 | Path | What it is |
 |---|---|
 | `CLAUDE.md` | Global instructions |
-| `skills/card`, `skills/project`, `skills/refine` | Skills |
+| `skills/card`, `skills/project`, `skills/refine`, `skills/retro` | Skills |
 | `settings/desktop.json` | Desktop `~/.claude/settings.json`: permission prompts, sandbox on, no unsandboxed retries, auto-update off |
 | `install.sh` | `install.sh desktop` links the files above into `~/.claude` and moves anything it replaces to `~/.claude/dotclaude-backup/` |
 

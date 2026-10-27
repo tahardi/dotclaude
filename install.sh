@@ -4,7 +4,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 claude_dir=${CLAUDE_DIR:-$HOME/.claude}
 backup_dir=$claude_dir/dotclaude-backup/$(date +%Y%m%d%H%M%S)
-skills=(card project refine)
+skills=(card project refine retro)
 
 link() {
 	local src=$1 dst=$2

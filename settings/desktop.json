@@ -5,8 +5,7 @@
     "DISABLE_TELEMETRY": "1",
     "DISABLE_ERROR_REPORTING": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
-    "NODE_USE_ENV_PROXY": "1",
-    "DISABLE_AUTOUPDATER": "1"
+    "NODE_USE_ENV_PROXY": "1"
   },
   "permissions": {
     "allow": [
@@ -38,8 +37,7 @@
       "Read(~/.npmrc)",
       "Read(~/.npm/**)",
       "Read(~/.pypirc)"
-    ],
-    "defaultMode": "default"
+    ]
   },
   "model": "opus",
   "enableAllProjectMcpServers": false,
@@ -149,7 +147,24 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
-        "~/Documents/code/wts"
+        "~/Documents/code/wts",
+        "~/Documents/code/dig-days/.git",
+        "~/Documents/code/dotclaude/.git",
+        "~/Documents/code/halo/.git",
+        "~/Documents/code/health-value-dashboard/.git",
+        "~/Documents/code/little-things/.git",
+        "~/Documents/code/maple/.git",
+        "~/Documents/code/xena/.git",
+        "~/Documents/code/c/bearclave-hsm/.git",
+        "~/Documents/code/go/bearclave/.git",
+        "~/Documents/code/go/bearclave-chain/.git",
+        "~/Documents/code/go/bearclave-contracts/.git",
+        "~/Documents/code/go/bearclave-examples/.git",
+        "~/Documents/code/go/bearclave-foundry/.git",
+        "~/Documents/code/go/bearclave-tf/.git",
+        "~/Documents/code/go/pluckmd/.git",
+        "~/Documents/code/go/template/.git",
+        "~/Documents/code/rust/bearclave-zkvm/.git"
       ]
     },
     "network": {
@@ -162,5 +177,6 @@
   },
   "alwaysThinkingEnabled": true,
   "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
   "preferredNotifChannel": "terminal_bell"
 }

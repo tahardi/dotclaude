@@ -149,7 +149,24 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
-        "~/Documents/code/wts"
+        "~/Documents/code/wts",
+        "~/Documents/code/dig-days/.git",
+        "~/Documents/code/dotclaude/.git",
+        "~/Documents/code/halo/.git",
+        "~/Documents/code/health-value-dashboard/.git",
+        "~/Documents/code/little-things/.git",
+        "~/Documents/code/maple/.git",
+        "~/Documents/code/xena/.git",
+        "~/Documents/code/c/bearclave-hsm/.git",
+        "~/Documents/code/go/bearclave/.git",
+        "~/Documents/code/go/bearclave-chain/.git",
+        "~/Documents/code/go/bearclave-contracts/.git",
+        "~/Documents/code/go/bearclave-examples/.git",
+        "~/Documents/code/go/bearclave-foundry/.git",
+        "~/Documents/code/go/bearclave-tf/.git",
+        "~/Documents/code/go/pluckmd/.git",
+        "~/Documents/code/go/template/.git",
+        "~/Documents/code/rust/bearclave-zkvm/.git"
       ]
     },
     "network": {

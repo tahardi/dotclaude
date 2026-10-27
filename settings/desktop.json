@@ -5,8 +5,7 @@
     "DISABLE_TELEMETRY": "1",
     "DISABLE_ERROR_REPORTING": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
-    "NODE_USE_ENV_PROXY": "1",
-    "DISABLE_AUTOUPDATER": "1"
+    "NODE_USE_ENV_PROXY": "1"
   },
   "permissions": {
     "allow": [
@@ -38,8 +37,7 @@
       "Read(~/.npmrc)",
       "Read(~/.npm/**)",
       "Read(~/.pypirc)"
-    ],
-    "defaultMode": "default"
+    ]
   },
   "model": "opus",
   "enableAllProjectMcpServers": false,
@@ -179,5 +177,6 @@
   },
   "alwaysThinkingEnabled": true,
   "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
   "preferredNotifChannel": "terminal_bell"
 }

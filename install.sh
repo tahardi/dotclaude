@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 claude_dir=${CLAUDE_DIR:-$HOME/.claude}
+managed_dir=${MANAGED_DIR:-/etc/claude-code}
 backup_dir=$claude_dir/dotclaude-backup/$(date +%Y%m%d%H%M%S)
 skills=(card project refine retro)
 
@@ -34,10 +35,16 @@ desktop() {
 	done
 }
 
+vm() {
+	install -D -m 0644 "$repo/settings/vm-managed.json" "$managed_dir/managed-settings.json"
+	install -D -m 0644 "$repo/settings/vm-managed-mcp.json" "$managed_dir/managed-mcp.json"
+}
+
 case "${1:-}" in
 	desktop) desktop ;;
+	vm) vm ;;
 	*)
-		echo "usage: install.sh desktop" >&2
+		echo "usage: install.sh desktop|vm" >&2
 		exit 2
 		;;
 esac

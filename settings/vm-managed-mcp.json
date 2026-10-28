@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "vault": {
+      "type": "stdio",
+      "command": "/usr/bin/socat",
+      "args": [
+        "STDIO",
+        "UNIX-CONNECT:/home/dev/.xena/vault.sock"
+      ]
+    }
+  }
+}

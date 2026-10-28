@@ -1,0 +1,215 @@
+{
+  "requiredMinimumVersion": "2.1.310",
+  "requiredMaximumVersion": "2.1.310",
+  "env": {
+    "DISABLE_AUTOUPDATER": "1",
+    "DISABLE_UPDATES": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_FEEDBACK_COMMAND": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "DO_NOT_TRACK": "1",
+    "CLAUDE_MEM_TELEMETRY": "false",
+    "CLAUDE_MEM_TELEMETRY_ERRORS": "false",
+    "EXPO_SKILLS_TELEMETRY": "0",
+    "HTTPS_PROXY": "http://192.168.150.1:3128",
+    "HTTP_PROXY": "http://192.168.150.1:3128",
+    "NO_PROXY": "localhost,127.0.0.1,::1",
+    "NODE_USE_ENV_PROXY": "1"
+  },
+  "disableClaudeAiConnectors": true,
+  "syncClaudeAiPlugins": false,
+  "syncClaudeAiSkills": false,
+  "disableRemoteControl": true,
+  "allowManagedHooksOnly": true,
+  "allowManagedPermissionRulesOnly": true,
+  "allowManagedMcpServersOnly": true,
+  "allowedMcpServers": [],
+  "skipDangerousModePermissionPrompt": true,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"tabId\":\"%s\",\"event\":\"UserPromptSubmit\",\"notificationType\":null}\\n' \"$MAPLE_TAB_ID\" >> '/home/dev/.xena/hooks.jsonl'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"tabId\":\"%s\",\"event\":\"Stop\",\"notificationType\":null}\\n' \"$MAPLE_TAB_ID\" >> '/home/dev/.xena/hooks.jsonl'"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"tabId\":\"%s\",\"event\":\"Notification\",\"notificationType\":\"permission_prompt\"}\\n' \"$MAPLE_TAB_ID\" >> '/home/dev/.xena/hooks.jsonl'"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(doas *)",
+      "Bash(pkexec *)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -fr /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -fr ~*)",
+      "Bash(rm -rf $HOME*)",
+      "Bash(rm -rf ..*)",
+      "Bash(mkfs*)",
+      "Bash(dd *)",
+      "Bash(shred *)",
+      "Bash(wipefs *)",
+      "Bash(chmod +s *)",
+      "Bash(chmod u+s *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(git push --force*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)",
+      "Bash(git push * +*)",
+      "Bash(git push --mirror*)",
+      "Bash(git push * --delete *)",
+      "Bash(git push * :*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git tag *)",
+      "Bash(git filter-branch *)",
+      "Bash(git config --global *)",
+      "Bash(git config --system *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr review *)",
+      "Bash(gh release *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Bash(gh secret *)",
+      "Bash(gh ruleset *)",
+      "Bash(gh auth *)",
+      "Bash(gh api * -X DELETE*)",
+      "Bash(gh api * --method DELETE*)",
+      "Bash(curl * | *sh*)",
+      "Bash(wget * | *sh*)",
+      "Bash(curl *-T *)",
+      "Bash(curl *--upload-file*)",
+      "Bash(curl *-d @*)",
+      "Bash(curl *--data @*)",
+      "Bash(curl *--data-binary @*)",
+      "Bash(curl *-F *=@*)",
+      "Bash(nc *)",
+      "Bash(ncat *)",
+      "Bash(netcat *)",
+      "Bash(socat *)",
+      "Bash(telnet *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(sftp *)",
+      "Bash(rsync *:*)",
+      "Bash(ftp *)",
+      "Bash(npm publish*)",
+      "Bash(pnpm publish*)",
+      "Bash(yarn publish*)",
+      "Bash(cargo publish*)",
+      "Bash(twine upload*)",
+      "Bash(uv publish*)",
+      "Bash(gem push*)",
+      "Bash(docker push *)",
+      "Bash(docker login*)",
+      "Bash(crontab *)",
+      "Bash(systemctl *)",
+      "Bash(at *)",
+      "Read(//home/dev/.config/xena/**)",
+      "Read(//home/dev/.ssh/**)",
+      "Read(//home/dev/.claude/.credentials.json)",
+      "Read(//home/dev/.claude-mem/settings.json)",
+      "Read(//etc/shadow)",
+      "Edit(//etc/claude-code/**)",
+      "Edit(//home/dev/.claude/settings.json)",
+      "Edit(//home/dev/.claude/settings.local.json)",
+      "Edit(//home/dev/.claude/hooks/**)",
+      "Edit(//home/dev/.claude-mem/settings.json)",
+      "Edit(//home/dev/.config/xena/**)",
+      "Edit(//home/dev/.xena/**)",
+      "Edit(//home/dev/.ssh/**)",
+      "Edit(//home/dev/.bashrc)",
+      "Edit(//home/dev/.profile)",
+      "Edit(//home/dev/.bash_profile)",
+      "Edit(//home/dev/.gitconfig)",
+      "Edit(//home/dev/.config/git/**)",
+      "Edit(**/.git/hooks/**)",
+      "Edit(**/.git/config)",
+      "Skill(caveman:caveman-setup)",
+      "Skill(caveman:caveman-discover)",
+      "Skill(caveman:caveman-evidence-review)",
+      "Skill(caveman:caveman-manage)",
+      "Skill(caveman:caveman-optimize)",
+      "Skill(claude-mem:cloud-sync)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
+    "enableWeakerNestedSandbox": false,
+    "enableWeakerNetworkIsolation": false,
+    "allowNestedUserNamespaces": false,
+    "filesystem": {
+      "allowWrite": [
+        "~/Documents/code",
+        "~/.cache",
+        "~/go"
+      ]
+    },
+    "network": {
+      "allowAllUnixSockets": false
+    }
+  },
+  "strictKnownMarketplaces": [
+    {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    {
+      "source": "github",
+      "repo": "JuliusBrussee/caveman"
+    },
+    {
+      "source": "github",
+      "repo": "DietrichGebert/ponytail"
+    },
+    {
+      "source": "github",
+      "repo": "thedotmack/claude-mem"
+    },
+    {
+      "source": "github",
+      "repo": "trailofbits/skills"
+    }
+  ],
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "caveman@caveman": true,
+    "ponytail@ponytail": true,
+    "claude-mem@thedotmack": true,
+    "gh-cli@trailofbits": true,
+    "expo@claude-plugins-official": true
+  }
+}

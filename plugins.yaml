@@ -1,0 +1,83 @@
+version: 1
+plugins:
+  - name: superpowers@claude-plugins-official
+    source: github:anthropics/claude-plugins-official
+    version: 7.0.0
+    commit: bb92a77741419a4ab5f06e711a283343f1ada0c3
+    hosts: []
+    disabled_features: []
+  - name: gopls-lsp@claude-plugins-official
+    source: github:anthropics/claude-plugins-official
+    version: 1.0.0
+    commit: fbe07fb6ce7d51d8e86ca6efdf050059894cdb80
+    hosts: []
+    disabled_features: []
+  - name: caveman@caveman
+    source: github:JuliusBrussee/caveman
+    version: 2.7.0
+    commit: 2fd153c67988e980fb0b2455c90832159a6a5a25
+    hosts: []
+    disabled_features:
+      - name: cloud-gateway
+        hosts: [gateway.caveman.so, app.caveman.so]
+        file: $SETTINGS
+        key: permissions.deny
+        contains:
+          - Skill(caveman:caveman-setup)
+          - Skill(caveman:caveman-discover)
+          - Skill(caveman:caveman-evidence-review)
+          - Skill(caveman:caveman-manage)
+          - Skill(caveman:caveman-optimize)
+  - name: ponytail@ponytail
+    source: github:DietrichGebert/ponytail
+    version: 4.10.0
+    commit: e3ba2aa6f1e6f0bc4d69eb09c9f0d0a93af56156
+    hosts: []
+    disabled_features: []
+  - name: claude-mem@thedotmack
+    source: github:thedotmack/claude-mem
+    version: 13.28.0
+    commit: 7d0355413c2aaa3fa57fe6788b2ba2717fa7ff6f
+    hosts: [api.anthropic.com]
+    disabled_features:
+      - name: cloud-sync
+        hosts: [sync.cmem.ai, cmem.ai]
+        file: ~/.claude-mem/settings.json
+        key: CLAUDE_MEM_CLOUD_SYNC_TOKEN
+        want: ""
+      - name: cloud-sync-skill
+        hosts: [sync.cmem.ai, cmem.ai]
+        file: $SETTINGS
+        key: permissions.deny
+        contains: [Skill(claude-mem:cloud-sync)]
+      - name: telemetry
+        hosts: [us.i.posthog.com, us-assets.i.posthog.com]
+        file: $SETTINGS
+        key: env.DO_NOT_TRACK
+        want: "1"
+  - name: gh-cli@trailofbits
+    source: github:trailofbits/skills
+    version: 1.6.2
+    commit: 0cc1c73a5e96749ab32d7ea5e14892fafa6972ae
+    hosts: []
+    disabled_features: []
+  - name: expo@claude-plugins-official
+    source: github:anthropics/claude-plugins-official
+    version: 1.13.9
+    commit: d4f484024fec15196bfd3c272e953e3f983972cf
+    hosts: [mcp.expo.dev]
+    disabled_features:
+      - name: telemetry
+        hosts: [us.i.posthog.com]
+        file: $SETTINGS
+        key: env.DO_NOT_TRACK
+        want: "1"
+mcp_servers:
+  - name: vault
+    scope: vm
+    command: [/usr/bin/socat, STDIO, "UNIX-CONNECT:/home/dev/.xena/vault.sock"]
+    hosts: []
+  - name: anchorhold
+    scope: desktop
+    command: [uv, run, --project, /home/bear/Documents/code/python/anchorhold, anchorhold-mcp]
+    hosts: []

@@ -5,7 +5,12 @@
     "DISABLE_TELEMETRY": "1",
     "DISABLE_ERROR_REPORTING": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
-    "NODE_USE_ENV_PROXY": "1"
+    "NODE_USE_ENV_PROXY": "1",
+    "DISABLE_UPDATES": "1",
+    "DO_NOT_TRACK": "1",
+    "CLAUDE_MEM_TELEMETRY": "false",
+    "CLAUDE_MEM_TELEMETRY_ERRORS": "false",
+    "EXPO_SKILLS_TELEMETRY": "0"
   },
   "permissions": {
     "allow": [
@@ -36,7 +41,13 @@
       "Read(~/.kube/**)",
       "Read(~/.npmrc)",
       "Read(~/.npm/**)",
-      "Read(~/.pypirc)"
+      "Read(~/.pypirc)",
+      "Skill(caveman:caveman-setup)",
+      "Skill(caveman:caveman-discover)",
+      "Skill(caveman:caveman-evidence-review)",
+      "Skill(caveman:caveman-manage)",
+      "Skill(caveman:caveman-optimize)",
+      "Skill(claude-mem:cloud-sync)"
     ]
   },
   "model": "opus",

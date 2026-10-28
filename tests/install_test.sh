@@ -83,6 +83,27 @@ test_desktop_fresh_dir() {
 	echo "PASS ${FUNCNAME[0]}"
 }
 
+test_vm_installs_managed_files() {
+	local managed_dir=$tmp_root/vm/etc/claude-code
+	mkdir -p "$managed_dir"
+	echo old >"$managed_dir/managed-settings.json"
+	chmod 600 "$managed_dir/managed-settings.json"
+	MANAGED_DIR=$managed_dir "$repo/install.sh" vm >/dev/null
+
+	local pair src dst
+	for pair in \
+		"settings/vm-managed.json:managed-settings.json" \
+		"settings/vm-managed-mcp.json:managed-mcp.json"; do
+		src=$repo/${pair%%:*}
+		dst=$managed_dir/${pair#*:}
+		[[ -f "$dst" && ! -L "$dst" ]] || { fail "${FUNCNAME[0]}" "$dst is not a regular file"; return; }
+		cmp -s "$src" "$dst" || { fail "${FUNCNAME[0]}" "$dst differs from $src"; return; }
+		[[ "$(stat -c %a "$dst")" == 644 ]] || { fail "${FUNCNAME[0]}" "$dst mode is not 644"; return; }
+	done
+
+	echo "PASS ${FUNCNAME[0]}"
+}
+
 test_unknown_target() {
 	setup
 
@@ -91,7 +112,7 @@ test_unknown_target() {
 		code=0
 		err=$(CLAUDE_DIR=$claude_dir "$repo/install.sh" $target 2>&1 >/dev/null) || code=$?
 		[[ $code -eq 2 ]] || { fail "${FUNCNAME[0]}" "target '$target' exited $code, want 2"; return; }
-		[[ "$err" == "usage: install.sh desktop" ]] || { fail "${FUNCNAME[0]}" "target '$target' printed '$err'"; return; }
+		[[ "$err" == "usage: install.sh desktop|vm" ]] || { fail "${FUNCNAME[0]}" "target '$target' printed '$err'"; return; }
 	done
 
 	echo "PASS ${FUNCNAME[0]}"
@@ -101,5 +122,6 @@ test_desktop_links_files
 test_desktop_backs_up_and_keeps_other_skills
 test_desktop_is_idempotent
 test_desktop_fresh_dir
+test_vm_installs_managed_files
 test_unknown_target
 exit "$((failures > 0))"

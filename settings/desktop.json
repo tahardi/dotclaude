@@ -147,6 +147,9 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
+        "~/.cache/go-build",
+        "~/go/pkg",
+        "~/.cache/golangci-lint",
         "~/Documents/code/wts",
         "~/Documents/code/dig-days/.git",
         "~/Documents/code/dotclaude/.git",

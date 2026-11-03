@@ -91,15 +91,27 @@ test_vm_installs_managed_files() {
 	MANAGED_DIR=$managed_dir "$repo/install.sh" vm >/dev/null
 
 	local pair src dst
+	mkdir -p "$managed_dir/.claude/skills/card"
+	echo stale >"$managed_dir/.claude/skills/card/stale.md"
+	MANAGED_DIR=$managed_dir "$repo/install.sh" vm >/dev/null
+
 	for pair in \
 		"settings/vm-managed.json:managed-settings.json" \
-		"settings/vm-managed-mcp.json:managed-mcp.json"; do
+		"settings/vm-managed-mcp.json:managed-mcp.json" \
+		"CLAUDE.md:CLAUDE.md" \
+		"skills/card/SKILL.md:.claude/skills/card/SKILL.md" \
+		"skills/card/scripts/jira.py:.claude/skills/card/scripts/jira.py" \
+		"skills/retro/SKILL.md:.claude/skills/retro/SKILL.md"; do
 		src=$repo/${pair%%:*}
 		dst=$managed_dir/${pair#*:}
 		[[ -f "$dst" && ! -L "$dst" ]] || { fail "${FUNCNAME[0]}" "$dst is not a regular file"; return; }
 		cmp -s "$src" "$dst" || { fail "${FUNCNAME[0]}" "$dst differs from $src"; return; }
 		[[ "$(stat -c %a "$dst")" == 644 ]] || { fail "${FUNCNAME[0]}" "$dst mode is not 644"; return; }
 	done
+
+	[[ ! -e "$managed_dir/.claude/skills/card/stale.md" ]] || { fail "${FUNCNAME[0]}" "stale skill file kept"; return; }
+	[[ "$(stat -c %a "$managed_dir/.claude/skills/card/scripts")" == 755 ]] ||
+		{ fail "${FUNCNAME[0]}" "skill folder mode is not 755"; return; }
 
 	echo "PASS ${FUNCNAME[0]}"
 }

@@ -79,5 +79,5 @@ mcp_servers:
     hosts: []
   - name: anchorhold
     scope: desktop
-    command: [uv, run, --project, /home/bear/Documents/code/python/anchorhold, anchorhold-mcp]
+    command: [uv, run, --project, $HOME/Documents/code/python/anchorhold, anchorhold-mcp]
     hosts: []

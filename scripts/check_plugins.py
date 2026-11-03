@@ -22,7 +22,37 @@ def load_allowlist(path: str) -> dict:
     if data.get("version") != 1:
         raise ValueError(f"unknown format version {data.get('version')}")
 
+    for plugin in data.get("plugins", []):
+        validate_plugin(plugin)
+
+    for server in data.get("mcp_servers", []):
+        require(server, ["name", "scope"], "mcp server")
+        if "command" not in server and "url" not in server:
+            raise ValueError(f"mcp server {server['name']}: missing command or url")
+
     return data
+
+
+def require(entry: dict, keys: list[str], label: str) -> None:
+    for key in keys:
+        if key not in entry:
+            raise ValueError(f"{label} {entry.get('name', '?')}: missing {key}")
+
+
+def validate_plugin(plugin: dict) -> None:
+    require(plugin, ["name", "source", "version"], "plugin")
+
+    for feature in plugin.get("disabled_features", []):
+        label = f"feature {plugin['name']}/{feature.get('name', '?')}"
+        for key in ["name", "file", "key"]:
+            if key not in feature:
+                raise ValueError(f"{label}: missing {key}")
+
+        if feature["file"] != "$SETTINGS" and not feature["file"].startswith("~/"):
+            raise ValueError(f"{label}: unknown file {feature['file']}")
+
+        if "want" not in feature and "contains" not in feature:
+            raise ValueError(f"{label}: missing want or contains")
 
 
 def load_installed(path: str) -> dict[str, list[dict]]:
@@ -30,6 +60,11 @@ def load_installed(path: str) -> dict[str, list[dict]]:
 
     if data.get("version") != 2:
         raise ValueError(f"unknown format version {data.get('version')}")
+
+    for name, entries in data["plugins"].items():
+        for entry in entries:
+            if "version" not in entry:
+                raise ValueError(f"{name}: missing version")
 
     return data["plugins"]
 
@@ -119,6 +154,13 @@ def target(server: dict) -> tuple:
     return tuple(server.get("command") or []), server.get("url") or ""
 
 
+def expand_home(server: dict, home: str) -> dict:
+    if not server.get("command"):
+        return server
+
+    return dict(server, command=[arg.replace("$HOME", home) for arg in server["command"]])
+
+
 def describe(server: dict) -> str:
     if server.get("command"):
         return server["command"][0]
@@ -168,13 +210,18 @@ def check(
         if name not in listed:
             items.append(drift("unlisted-plugin", name, "", ",".join(sorted({e["version"] for e in entries}))))
 
+    listed_markets = {name.split("@", 1)[1] for name in listed}
+    for market, source in marketplaces.items():
+        if market not in listed_markets:
+            items.append(drift("unlisted-marketplace", market, "", source))
+
     for name, plugin in listed.items():
         if name not in installed:
             items.append(drift("missing-plugin", name, plugin["version"], ""))
             continue
         items += check_plugin(plugin, installed[name], marketplaces, settings_path, home)
 
-    listed_servers = {s["name"]: s for s in allowlist.get("mcp_servers", []) if s["scope"] == scope}
+    listed_servers = {s["name"]: expand_home(s, home) for s in allowlist.get("mcp_servers", []) if s["scope"] == scope}
     for name, server in servers.items():
         want = listed_servers.get(name)
         if want is None:
@@ -184,6 +231,16 @@ def check(
             items.append(drift("mcp-command", name, describe(want), describe(server)))
 
     return sorted(items, key=lambda item: (item["kind"], item["name"]))
+
+
+def check_warnings(allowlist: dict, servers: dict, scope: str) -> list[dict]:
+    items = []
+
+    for server in allowlist.get("mcp_servers", []):
+        if server["scope"] == scope and server["name"] not in servers:
+            items.append(drift("missing-mcp", server["name"], describe(server), ""))
+
+    return sorted(items, key=lambda item: item["name"])
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -231,7 +288,8 @@ def main(argv: list[str]) -> int:
         print(f"check_plugins: reading settings: {e}", file=sys.stderr)
         return 2
 
-    print(json.dumps({"version": 1, "scope": args.scope, "drift": items}))
+    warnings = check_warnings(loaded[0], loaded[3], args.scope)
+    print(json.dumps({"version": 1, "scope": args.scope, "drift": items, "warnings": warnings}))
     return 1 if items else 0
 
 

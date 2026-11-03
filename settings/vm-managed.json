@@ -1,6 +1,6 @@
 {
-  "requiredMinimumVersion": "2.1.310",
-  "requiredMaximumVersion": "2.1.310",
+  "requiredMinimumVersion": "2.1.314",
+  "requiredMaximumVersion": "2.1.314",
   "env": {
     "DISABLE_AUTOUPDATER": "1",
     "DISABLE_UPDATES": "1",

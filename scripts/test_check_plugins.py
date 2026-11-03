@@ -8,7 +8,15 @@ import unittest
 
 import yaml
 
-from check_plugins import check, load_allowlist, load_installed, load_marketplaces, load_mcp_servers, main
+from check_plugins import (
+    check,
+    check_warnings,
+    load_allowlist,
+    load_installed,
+    load_marketplaces,
+    load_mcp_servers,
+    main,
+)
 
 SHA_A = "a" * 40
 SHA_B = "b" * 40
@@ -241,6 +249,15 @@ def mcp_scope(f):
     f.claude_json = {}
 
 
+def unlisted_marketplace(f):
+    f.marketplaces["market-c"] = {"source": {"source": "github", "repo": "example/market-c"}}
+
+
+def mcp_home_variable(f):
+    f.allowlist["mcp_servers"][0]["command"] = ["$HOME/bin/notes", "--home", "$HOME"]
+    f.claude_json["mcpServers"]["notes"] = {"command": f"{f.home}/bin/notes", "args": ["--home", f.home]}
+
+
 def plugin_mcp_ignored(f):
     write_json(os.path.join(f.root, "alpha", ".mcp.json"), {"mcpServers": {"alpha-mcp": {"command": "/bin/alpha"}}})
     f.installed["plugins"]["alpha@market-a"][0]["installPath"] = os.path.join(f.root, "alpha")
@@ -368,6 +385,13 @@ class TestCheck(unittest.TestCase):
                 [{"kind": "unlisted-mcp", "name": "notes", "want": "", "got": "/usr/bin/notes"}],
             ),
             ("plugin mcp ignored", plugin_mcp_ignored, "desktop", []),
+            (
+                "unlisted marketplace",
+                unlisted_marketplace,
+                "desktop",
+                [{"kind": "unlisted-marketplace", "name": "market-c", "want": "", "got": "github:example/market-c"}],
+            ),
+            ("mcp home variable", mcp_home_variable, "desktop", []),
         ]
         for name, change, scope, want in cases:
             with self.subTest(name):
@@ -379,6 +403,49 @@ class TestCheck(unittest.TestCase):
 
                     # when
                     got = f.run_check(scope)
+
+                    # then
+                    self.assertEqual(got, want)
+
+
+class TestCheckWarnings(unittest.TestCase):
+    def test_check_warnings(self):
+        cases = [
+            ("clean", None, "desktop", []),
+            (
+                "unlisted mcp not warned",
+                unlisted_mcp,
+                "desktop",
+                [],
+            ),
+            (
+                "listed mcp not configured",
+                lambda f: f.claude_json["mcpServers"].pop("notes"),
+                "desktop",
+                [{"kind": "missing-mcp", "name": "notes", "want": "/usr/bin/notes", "got": ""}],
+            ),
+            (
+                "other scope not expected",
+                lambda f: f.claude_json["mcpServers"].pop("notes"),
+                "vm",
+                [],
+            ),
+        ]
+        for name, change, scope, want in cases:
+            with self.subTest(name):
+                with tempfile.TemporaryDirectory() as root:
+                    # given
+                    f = Fixture(root)
+                    if change:
+                        change(f)
+                    f.write()
+
+                    # when
+                    got = check_warnings(
+                        load_allowlist(f.allowlist_path),
+                        load_mcp_servers(f.claude_json_path, None),
+                        scope,
+                    )
 
                     # then
                     self.assertEqual(got, want)
@@ -421,6 +488,42 @@ class TestMain(unittest.TestCase):
             ("error - missing marketplaces", "missing-marketplaces", 2, "check_plugins: reading marketplaces:"),
             ("error - bad managed mcp", "bad-managed-mcp", 2, "check_plugins: reading mcp servers:"),
             ("error - bad settings", "bad-settings", 2, "check_plugins: reading settings:"),
+            (
+                "happy path - missing mcp only warns",
+                lambda f: f.managed_mcp.update(mcpServers={}),
+                0,
+                "",
+            ),
+            (
+                "error - allowlist plugin missing source",
+                lambda f: alpha(f).pop("source"),
+                2,
+                "check_plugins: reading allowlist: plugin alpha@market-a: missing source",
+            ),
+            (
+                "error - allowlist feature unknown file",
+                lambda f: alpha(f).update(disabled_features=[dict(TRACK_FEATURE, file="/etc/x.json")]),
+                2,
+                "check_plugins: reading allowlist: feature alpha@market-a/telemetry: unknown file /etc/x.json",
+            ),
+            (
+                "error - allowlist feature without want or contains",
+                lambda f: alpha(f).update(disabled_features=[{k: v for k, v in TRACK_FEATURE.items() if k != "want"}]),
+                2,
+                "check_plugins: reading allowlist: feature alpha@market-a/telemetry: missing want or contains",
+            ),
+            (
+                "error - allowlist mcp server without command or url",
+                lambda f: f.allowlist["mcp_servers"][0].pop("command"),
+                2,
+                "check_plugins: reading allowlist: mcp server notes: missing command or url",
+            ),
+            (
+                "error - installed plugin missing version",
+                lambda f: f.installed["plugins"]["alpha@market-a"][0].pop("version"),
+                2,
+                "check_plugins: reading installed plugins: alpha@market-a: missing version",
+            ),
         ]
         files = {
             "missing-allowlist": lambda f: os.remove(f.allowlist_path),
@@ -446,9 +549,12 @@ class TestMain(unittest.TestCase):
 
                     # then
                     self.assertEqual(code, want_code)
-                    if want_code == 0:
-                        self.assertEqual(json.loads(out), {"version": 1, "scope": "vm", "drift": []})
+                    if name == "happy path - clean":
+                        self.assertEqual(json.loads(out), {"version": 1, "scope": "vm", "drift": [], "warnings": []})
                         self.assertEqual(err, "")
+                    if name == "happy path - missing mcp only warns":
+                        self.assertEqual(json.loads(out)["drift"], [])
+                        self.assertEqual([w["kind"] for w in json.loads(out)["warnings"]], ["missing-mcp"])
                     if want_code == 1:
                         self.assertEqual(len(json.loads(out)["drift"]), 1)
                     if want_code == 2:

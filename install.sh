@@ -36,8 +36,19 @@ desktop() {
 }
 
 vm() {
+	local skill file
+
 	install -D -m 0644 "$repo/settings/vm-managed.json" "$managed_dir/managed-settings.json"
 	install -D -m 0644 "$repo/settings/vm-managed-mcp.json" "$managed_dir/managed-mcp.json"
+	install -D -m 0644 "$repo/CLAUDE.md" "$managed_dir/CLAUDE.md"
+
+	for skill in "${skills[@]}"; do
+		rm -rf "$managed_dir/.claude/skills/$skill"
+
+		while IFS= read -r -d '' file; do
+			install -D -m 0644 "$repo/skills/$skill/$file" "$managed_dir/.claude/skills/$skill/$file"
+		done < <(cd "$repo/skills/$skill" && find . -type f -not -path '*/__pycache__/*' -printf '%P\0')
+	done
 }
 
 case "${1:-}" in

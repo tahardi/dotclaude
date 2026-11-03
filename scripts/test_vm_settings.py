@@ -157,6 +157,10 @@ class TestVmSettings(unittest.TestCase):
         for plugin, feature, (off, got) in results:
             self.assertTrue(off, f"{plugin}/{feature}: {got}")
         self.assertEqual(settings["env"]["DO_NOT_TRACK"], "1")
+        self.assertLessEqual(
+            {m["source"]["repo"] for m in settings["extraKnownMarketplaces"].values()},
+            {p["source"].removeprefix("github:") for p in read_plugins()},
+        )
         self.assertTrue(skills)
         self.assertLessEqual(skills, set(settings["permissions"]["deny"]))
 

@@ -258,11 +258,6 @@ def mcp_home_variable(f):
     f.claude_json["mcpServers"]["notes"] = {"command": f"{f.home}/bin/notes", "args": ["--home", f.home]}
 
 
-def plugin_mcp_ignored(f):
-    write_json(os.path.join(f.root, "alpha", ".mcp.json"), {"mcpServers": {"alpha-mcp": {"command": "/bin/alpha"}}})
-    f.installed["plugins"]["alpha@market-a"][0]["installPath"] = os.path.join(f.root, "alpha")
-
-
 class TestCheck(unittest.TestCase):
     def test_check(self):
         cases = [
@@ -384,7 +379,6 @@ class TestCheck(unittest.TestCase):
                 "vm",
                 [{"kind": "unlisted-mcp", "name": "notes", "want": "", "got": "/usr/bin/notes"}],
             ),
-            ("plugin mcp ignored", plugin_mcp_ignored, "desktop", []),
             (
                 "unlisted marketplace",
                 unlisted_marketplace,

@@ -69,6 +69,7 @@ class TestVmSettings(unittest.TestCase):
         self.assertIs(settings["syncClaudeAiPlugins"], False)
         self.assertIs(settings["syncClaudeAiSkills"], False)
         self.assertEqual(settings["allowedMcpServers"], [])
+        self.assertEqual(settings["statusLine"], {"type": "command", "command": "/etc/claude-code/statusline.sh"})
         self.assertNotIn("disableBypassPermissionsMode", settings["permissions"])
         self.assertEqual(settings["requiredMinimumVersion"], settings["requiredMaximumVersion"])
         self.assertRegex(settings["requiredMinimumVersion"], r"^\d+\.\d+\.\d+$")

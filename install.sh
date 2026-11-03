@@ -29,6 +29,7 @@ desktop() {
 	mkdir -p "$claude_dir/skills"
 	link "$repo/CLAUDE.md" "$claude_dir/CLAUDE.md"
 	link "$repo/settings/desktop.json" "$claude_dir/settings.json"
+	link "$repo/statusline.sh" "$claude_dir/statusline.sh"
 
 	for skill in "${skills[@]}"; do
 		link "$repo/skills/$skill" "$claude_dir/skills/$skill"
@@ -41,6 +42,7 @@ vm() {
 	install -D -m 0644 "$repo/settings/vm-managed.json" "$managed_dir/managed-settings.json"
 	install -D -m 0644 "$repo/settings/vm-managed-mcp.json" "$managed_dir/managed-mcp.json"
 	install -D -m 0644 "$repo/CLAUDE.md" "$managed_dir/CLAUDE.md"
+	install -D -m 0755 "$repo/statusline.sh" "$managed_dir/statusline.sh"
 
 	for skill in "${skills[@]}"; do
 		rm -rf "$managed_dir/.claude/skills/$skill"

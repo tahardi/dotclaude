@@ -29,6 +29,7 @@ test_desktop_links_files() {
 	for pair in \
 		"CLAUDE.md:CLAUDE.md" \
 		"settings/desktop.json:settings.json" \
+		"statusline.sh:statusline.sh" \
 		"skills/card:skills/card" \
 		"skills/project:skills/project" \
 		"skills/refine:skills/refine" \
@@ -109,6 +110,10 @@ test_vm_installs_managed_files() {
 		[[ "$(stat -c %a "$dst")" == 644 ]] || { fail "${FUNCNAME[0]}" "$dst mode is not 644"; return; }
 	done
 
+	[[ "$(stat -c %a "$managed_dir/statusline.sh")" == 755 ]] ||
+		{ fail "${FUNCNAME[0]}" "statusline.sh mode is not 755"; return; }
+	cmp -s "$repo/statusline.sh" "$managed_dir/statusline.sh" ||
+		{ fail "${FUNCNAME[0]}" "statusline.sh differs"; return; }
 	[[ ! -e "$managed_dir/.claude/skills/card/stale.md" ]] || { fail "${FUNCNAME[0]}" "stale skill file kept"; return; }
 	[[ "$(stat -c %a "$managed_dir/.claude/skills/card/scripts")" == 755 ]] ||
 		{ fail "${FUNCNAME[0]}" "skill folder mode is not 755"; return; }

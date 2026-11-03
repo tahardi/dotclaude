@@ -37,6 +37,9 @@ jobs:
       - name: Run Skill Script Tests
         run: make test-python
 
+      - name: Run Script Tests
+        run: make test-scripts
+
       - name: Run Install Script Test
         run: make test-install
 
@@ -48,7 +51,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check JSON Syntax
+      - name: Check JSON and YAML Syntax
         run: make syntax
 
   secrets:

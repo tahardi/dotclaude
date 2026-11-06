@@ -56,7 +56,8 @@ If rules 1 and 2 conflict, stop and ask the user.
    - Add a section listing each acceptance criterion with its evidence.
    - Add "Deviations from the card" and "Needs Taylor" sections, or write "None" in each.
    - Add a "Card impacts" section from "Card Impacts" below, or write "None".
-   - Add a "Reviewer notes" section from "Self-Review" below, or write "None".
+   - Add a "Reviewer notes" section from "Self-Review" below as a numbered list, so Taylor can answer by number, or
+     write "None".
    - Add a "Tests" section: one bullet per test added or changed, naming the behavior it guards. End the section
      with "Added by Self-Review:" and a list of the tests Self-Review added, or "None".
 12. **Comment on the card:** `jira.py comment KEY "PR: <url>"`.
@@ -70,7 +71,7 @@ If rules 1 and 2 conflict, stop and ask the user.
     - Run `jira.py transition KEY "In Review"`.
     - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, and reviewer notes.
     - Report to the user in the same order: the PR URL, the CI status, deviations, Needs Taylor, card impacts, and
-      reviewer notes. Then list the tests, and the tests Self-Review added.
+      reviewer notes, numbered as in the PR. Then list the tests, and the tests Self-Review added.
     - Then run "Review Round" once.
 
 ## Self-Review

@@ -10,7 +10,11 @@
     "DO_NOT_TRACK": "1",
     "CLAUDE_MEM_TELEMETRY": "false",
     "CLAUDE_MEM_TELEMETRY_ERRORS": "false",
-    "EXPO_SKILLS_TELEMETRY": "0"
+    "EXPO_SKILLS_TELEMETRY": "0",
+    "GOPATH": "/home/bear/.cache/claude-go/gopath",
+    "GOCACHE": "/home/bear/.cache/claude-go/build",
+    "GOLANGCI_LINT_CACHE": "/home/bear/.cache/claude-go/golangci-lint",
+    "GOTMPDIR": "/home/bear/.cache/claude-go/tmp"
   },
   "permissions": {
     "allow": [
@@ -152,9 +156,7 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
-        "~/.cache/go-build",
-        "~/go/pkg",
-        "~/.cache/golangci-lint",
+        "~/.cache/claude-go",
         "~/Documents/code/wts",
         "~/Documents/code/dig-days/.git",
         "~/Documents/code/dotclaude/.git",

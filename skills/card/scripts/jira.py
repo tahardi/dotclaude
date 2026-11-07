@@ -7,6 +7,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from adf import render, text_of
+
 USAGE = """usage:
   python3 jira.py get KEY                 print card as markdown with status, parent, links
   python3 jira.py transition KEY STATUS   move card (e.g. "In Progress", "In Review")
@@ -78,45 +80,6 @@ def api(method, path, body=None):
             return json.loads(data) if data else None
     except urllib.error.HTTPError as e:
         sys.exit(f"jira {method} {path} failed: {e.code} {e.read().decode()[:500]}")
-
-
-def text_of(node):
-    if node.get("type") == "text":
-        t = node.get("text", "")
-        marks = {m["type"] for m in node.get("marks", [])}
-        if "code" in marks:
-            return f"`{t}`"
-        if "strong" in marks:
-            return f"**{t}**"
-        if "strike" in marks:
-            return f"~~{t}~~"
-        return t
-    if node.get("type") == "hardBreak":
-        return "\n"
-    return "".join(text_of(c) for c in node.get("content", []))
-
-
-def render(node, indent=""):
-    kind = node.get("type")
-    content = node.get("content", [])
-    if kind == "doc":
-        return "\n\n".join(render(c) for c in content)
-    if kind == "heading":
-        return "#" * node["attrs"]["level"] + " " + text_of(node)
-    if kind == "paragraph":
-        return indent + text_of(node)
-    if kind == "codeBlock":
-        lang = (node.get("attrs") or {}).get("language") or ""
-        return f"{indent}```{lang}\n{text_of(node)}\n{indent}```"
-    if kind in ("bulletList", "orderedList"):
-        lines = []
-        for i, item in enumerate(content, 1):
-            bullet = f"{i}. " if kind == "orderedList" else "- "
-            parts = [render(c, indent + "   ") for c in item.get("content", [])]
-            first = parts[0].lstrip() if parts else ""
-            lines.append(indent + bullet + first + "".join("\n" + p for p in parts[1:]))
-        return "\n".join(lines)
-    return indent + text_of(node)
 
 
 def get(key):

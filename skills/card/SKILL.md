@@ -43,6 +43,11 @@ If rules 1 and 2 conflict, stop and ask the user.
    - Run `make pre-pr` from the worktree root. It must exit 0. On failure, find the root cause, fix it, and run it again.
    - Check each acceptance criterion and note the evidence: a test name, a command and its output, or a file.
    - Criteria you cannot check (on-device checks, anything needing the user's hardware or accounts) go in a "Needs Taylor" list. They do not block the PR.
+   - Write each Needs Taylor item as a short heading, then every command Taylor runs in a fenced `bash` block (one
+     command per line, never inline in a sentence), then an "Expect:" line saying what Taylor should see. Start the
+     section with a block that `cd`s into the worktree, and put setup Taylor needs first (a build, a throwaway config)
+     in its own block. Make placeholders shell variables set at the top of the block that uses them, such as
+     `IPHONE=192.0.2.5`, so the rest copies unchanged.
    - If a Needs Taylor check needs made-up cards, create each one with `jira.py test-card PROJECT SUMMARY`, with
      a description that has whatever the check needs (headings, lists, and so on). It adds the `[TEST]` prefix and
      the `test-card` label, assigns the card to Taylor (unassigned cards don't show in Taylor's sprint), and adds it

@@ -23,7 +23,7 @@ setup() {
 
 test_desktop_links_files() {
 	setup
-	CLAUDE_DIR=$claude_dir "$repo/install.sh" desktop >/dev/null
+	CLAUDE_DIR=$claude_dir GO_CACHE_DIR=$claude_dir/claude-go "$repo/install.sh" desktop >/dev/null
 
 	local pair src dst
 	for pair in \
@@ -44,7 +44,7 @@ test_desktop_links_files() {
 
 test_desktop_backs_up_and_keeps_other_skills() {
 	setup
-	CLAUDE_DIR=$claude_dir "$repo/install.sh" desktop >/dev/null
+	CLAUDE_DIR=$claude_dir GO_CACHE_DIR=$claude_dir/claude-go "$repo/install.sh" desktop >/dev/null
 
 	[[ "$(cat "$claude_dir"/dotclaude-backup/*/CLAUDE.md)" == old ]] ||
 		{ fail "${FUNCNAME[0]}" "no CLAUDE.md backup"; return; }
@@ -62,10 +62,10 @@ test_desktop_backs_up_and_keeps_other_skills() {
 
 test_desktop_is_idempotent() {
 	setup
-	CLAUDE_DIR=$claude_dir "$repo/install.sh" desktop >/dev/null
+	CLAUDE_DIR=$claude_dir GO_CACHE_DIR=$claude_dir/claude-go "$repo/install.sh" desktop >/dev/null
 
 	local out
-	out=$(CLAUDE_DIR=$claude_dir "$repo/install.sh" desktop)
+	out=$(CLAUDE_DIR=$claude_dir GO_CACHE_DIR=$claude_dir/claude-go "$repo/install.sh" desktop)
 
 	[[ -z "$out" ]] || { fail "${FUNCNAME[0]}" "second run moved files: $out"; return; }
 	echo "PASS ${FUNCNAME[0]}"
@@ -73,13 +73,14 @@ test_desktop_is_idempotent() {
 
 test_desktop_fresh_dir() {
 	local fresh_dir=$tmp_root/fresh/.claude
-	CLAUDE_DIR=$fresh_dir "$repo/install.sh" desktop >/dev/null
+	CLAUDE_DIR=$fresh_dir GO_CACHE_DIR=$tmp_root/fresh/claude-go "$repo/install.sh" desktop >/dev/null
 
 	[[ "$(readlink "$fresh_dir/skills/card")" == "$repo/skills/card" ]] ||
 		{ fail "${FUNCNAME[0]}" "card not linked in fresh dir"; return; }
 	[[ "$(readlink "$fresh_dir/skills/retro")" == "$repo/skills/retro" ]] ||
 		{ fail "${FUNCNAME[0]}" "retro not linked in fresh dir"; return; }
 	[[ ! -e "$fresh_dir/dotclaude-backup" ]] || { fail "${FUNCNAME[0]}" "backup made with nothing to replace"; return; }
+	[[ -d "$tmp_root/fresh/claude-go/tmp" ]] || { fail "${FUNCNAME[0]}" "Go temp folder not created"; return; }
 
 	echo "PASS ${FUNCNAME[0]}"
 }

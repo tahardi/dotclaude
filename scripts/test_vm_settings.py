@@ -154,7 +154,23 @@ class TestVmSettings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             results = [(name, f["name"], feature_off(f, DESKTOP, home)) for name, f in features]
 
+        allow_write = [p.replace("~", "/home/bear", 1) for p in settings["sandbox"]["filesystem"]["allowWrite"]]
+
         # then
+        for name in ["GOPATH", "GOCACHE", "GOLANGCI_LINT_CACHE", "GOTMPDIR"]:
+            value = settings["env"][name]
+            self.assertTrue(value.startswith("/home/bear/.cache/claude-go/"), f"writing {name} outside claude-go")
+            self.assertTrue(
+                any(value == p or value.startswith(p + "/") for p in allow_write),
+                f"writing {name} outside allowWrite",
+            )
+        self.assertIn("~/.cache/claude-go", settings["sandbox"]["filesystem"]["allowWrite"])
+        for path in ["~/.cache/go-build", "~/go/pkg", "~/go", "~/.cache/golangci-lint"]:
+            shared = path.replace("~", "/home/bear", 1)
+            self.assertFalse(
+                any(shared == p.rstrip("/") or shared.startswith(p.rstrip("/") + "/") for p in allow_write),
+                f"sharing Go cache {path} with unsandboxed commands",
+            )
         for plugin, feature, (off, got) in results:
             self.assertTrue(off, f"{plugin}/{feature}: {got}")
         self.assertEqual(settings["env"]["DO_NOT_TRACK"], "1")

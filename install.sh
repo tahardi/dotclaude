@@ -4,6 +4,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 claude_dir=${CLAUDE_DIR:-$HOME/.claude}
 managed_dir=${MANAGED_DIR:-/etc/claude-code}
+go_cache_dir=${GO_CACHE_DIR:-$HOME/.cache/claude-go}
 backup_dir=$claude_dir/dotclaude-backup/$(date +%Y%m%d%H%M%S)
 skills=(card project refine retro)
 
@@ -26,7 +27,7 @@ link() {
 desktop() {
 	local skill
 
-	mkdir -p "$claude_dir/skills"
+	mkdir -p "$claude_dir/skills" "$go_cache_dir/tmp"
 	link "$repo/CLAUDE.md" "$claude_dir/CLAUDE.md"
 	link "$repo/settings/desktop.json" "$claude_dir/settings.json"
 	link "$repo/statusline.sh" "$claude_dir/statusline.sh"

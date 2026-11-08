@@ -178,10 +178,20 @@
       ]
     },
     "network": {
+      "strictAllowlist": true,
       "allowedDomains": [
         "github.com",
         "api.github.com",
-        "taylorantoniohardin.atlassian.net"
+        "taylorantoniohardin.atlassian.net",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "vuln.go.dev",
+        "registry.npmjs.org",
+        "www.electronjs.org",
+        "index.crates.io",
+        "static.crates.io",
+        "static.rust-lang.org",
+        "huggingface.co"
       ]
     }
   },

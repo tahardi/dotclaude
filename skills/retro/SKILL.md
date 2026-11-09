@@ -18,8 +18,8 @@ Read every PR merged in the last 7 days across Taylor's repos, find feedback tha
    - `gh pr list --repo <r> --state merged --search "merged:>=$SINCE" --limit 200 --json number,title,body,url`
    - per PR, `gh pr view <n> --repo <r> --json comments,reviews`: `.comments[]` and `.reviews[]`, author `.author.login`.
    - per PR, `gh api --paginate repos/<r>/pulls/<n>/comments`: author `.user.login`, plus `.path` and `.html_url`.
-   - Keep a comment only if its author is `$ME`, its body is not empty, and it does not start with `**Claude:**`. Drop plain approvals and thanks, such as "LGTM" or "Cool it works now!".
-   - From each PR body, take the text under `## Deviations from the card`, `## Card impacts`, and `## Reviewer notes` up to the next `## `. Skip sections that say "None".
+   - Keep a comment only if its author is `$ME` and its body is not empty. Claude posts with the same login, so sort by how the body starts: `**Claude:**` is Claude's reply, so drop it; `**Reviewer note:**` is Claude's reviewer note, so keep each note or numbered item as a reviewer note, never as Taylor's comment; anything else is Taylor's comment. Drop plain approvals and thanks, such as "LGTM" or "Cool it works now!".
+   - From each PR body, take the text under `## Deviations from the card` and `## Card impacts` up to the next `## `. Skip sections that say "None".
 3. **Cluster.** Group items that ask for the same change. Keep groups that span 2 or more PRs. Each kept group is a pattern.
 4. **Target.** Pick the repo and file for each pattern:
    - A rule about one repo's code, tests, or layout: that repo's `CLAUDE.md`.

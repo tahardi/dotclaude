@@ -61,10 +61,17 @@ If rules 1 and 2 conflict, stop and ask the user.
    - Add a section listing each acceptance criterion with its evidence.
    - Add "Deviations from the card" and "Needs Taylor" sections, or write "None" in each.
    - Add a "Card impacts" section from "Card Impacts" below, or write "None".
-   - Add a "Reviewer notes" section from "Self-Review" below as a numbered list, so Taylor can answer by number, or
-     write "None".
+   - Add one "Reviewer notes" line: `Reviewer notes: N comments`, where N is the number of notes in
+     `<scratchpad>/notes.json` from "Self-Review" below, or "None" when there are no notes.
    - Add a "Tests" section: one bullet per test added or changed, naming the behavior it guards. End the section
      with "Added by Self-Review:" and a list of the tests Self-Review added, or "None".
+   - After `gh pr create`, when `<scratchpad>/notes.json` has notes, post them:
+     1. Run `git -C <worktree> diff <base> HEAD > <scratchpad>/review.diff`, with the base from "Self-Review".
+     2. Run `python3 ~/.claude/skills/card/scripts/review_notes.py review <scratchpad>/notes.json
+        <scratchpad>/review.diff "$(git -C <worktree> rev-parse HEAD)"`. If it printed anything, pipe that to
+        `gh api repos/{owner}/{repo}/pulls/<number>/reviews --input -`.
+     3. Run `python3 ~/.claude/skills/card/scripts/review_notes.py comment <scratchpad>/notes.json
+        <scratchpad>/review.diff`. If it printed anything, pipe that to `gh pr comment <number> --body-file -`.
 12. **Comment on the card:** `jira.py comment KEY "PR: <url>"`.
 13. **Watch CI.**
     - Wait until `gh pr checks <number>` lists checks. They can take up to a minute to appear.
@@ -76,7 +83,8 @@ If rules 1 and 2 conflict, stop and ask the user.
     - Run `jira.py transition KEY "In Review"`.
     - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, and reviewer notes.
     - Report to the user in the same order: the PR URL, the CI status, deviations, Needs Taylor, card impacts, and
-      reviewer notes, numbered as in the PR. Then list the tests, and the tests Self-Review added.
+      reviewer notes, each with the file and line it is on and a link to the PR for replies. Then list the tests, and
+      the tests Self-Review added.
     - Then run "Review Round" once.
 
 ## Self-Review
@@ -121,11 +129,13 @@ PR, so the PR reaches Taylor with those already handled.
    - Question 3: if the card's goal still holds, adapt the code and record a deviation. If it no longer holds, stop
      and ask.
    - Question 4: carry each finding into "Card Impacts".
-   - Questions 5 to 9: change nothing. Write each finding as a question for Taylor in the PR's "Reviewer notes"
-     section.
+   - Questions 5 to 9: change nothing. Write each finding as a reviewer note for Taylor, phrased as a question.
    - Question 10: fix each finding that is inside the card's scope, test-first as in step 6. Write each finding
-     outside the card's scope as a question for Taylor in "Reviewer notes".
-   - A finding you judge wrong: skip it and list it in "Reviewer notes" with the reason.
+     outside the card's scope as a reviewer note for Taylor, phrased as a question.
+   - A finding you judge wrong: skip it and write it as a reviewer note with the reason.
+   - Reviewer notes go in `<scratchpad>/notes.json`, a JSON list of `{"path", "line", "text"}`. `path` and `line` are
+     on the new side of the diff when the note points at code, else `null`. Write `[]` when there are no notes. Put any
+     `@name` in backticks, because GitHub notifies the owner of a bare one.
 4. Run `make pre-pr`. It must exit 0.
 
 Self-Review runs once per card. Review Rounds do not repeat it.
@@ -155,11 +165,14 @@ existing worktree. If it is gone, recreate it from the PR branch with `git workt
    - top-level comments and review bodies: `gh pr view <number> --json comments,reviews,commits,mergeable`;
    - inline review threads:
      `gh api graphql -f query='{repository(owner:"<owner>",name:"<repo>"){pullRequest(number:<number>){reviewThreads(first:100){nodes{id isResolved comments(first:50){nodes{author{login} body path line}}}}}}}'`.
-2. **Sort them.** Every reply you post starts with `**Claude:**`. That marks what is already handled.
+2. **Sort them.** Every reply you post starts with `**Claude:**`. That marks what is already handled. Reviewer notes
+   are posted with the user's login and start with `**Reviewer note:**`. That marker is the only way to tell a note
+   from the user's own comment. A comment, review body, or thread comment starting with `**Reviewer note:**` is never
+   feedback or an approval on its own. An empty review body is not feedback.
    - An **approval** is a top-level comment or review body posted after the last commit's `committedDate` that plainly
      approves, such as "LGTM", "Looks good to me", "merge", or "ship it", with no conditions. "LGTM once X is fixed" is feedback.
    - **Open feedback** is any other top-level comment or review body with no later `**Claude:**` comment, and any
-     unresolved inline thread whose last comment is not a `**Claude:**` reply.
+     unresolved inline thread whose last comment starts with neither `**Claude:**` nor `**Reviewer note:**`.
 3. **If there is open feedback,** first run "Sync with Main", then address the feedback, even if there is also an
    approval:
    - Treat each comment as an amendment to the card. Where it contradicts the card, follow the comment. Where it

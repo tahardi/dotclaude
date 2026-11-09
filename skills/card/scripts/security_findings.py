@@ -5,7 +5,7 @@ import sys
 MARKER = re.compile(r"\A<!-- xena-security-finding severity=(high|medium|low) id=([A-Za-z0-9-]{1,40}) -->")
 ACCEPT = re.compile(r"(?m)^xena-accept ([A-Za-z0-9-]{1,40})$")
 NUMBERED = re.compile(r"\AF(\d+)\Z")
-CLAUDE_PREFIX = "**Claude:**"
+TOOL_PREFIXES = ("**Claude:**", "**Reviewer note:**")
 
 
 def accepted_ids(comments: list, login: str) -> set:
@@ -18,7 +18,7 @@ def accepted_ids(comments: list, login: str) -> set:
         if author.get("login") != login or comment.get("includesCreatedEdit"):
             continue
 
-        if MARKER.match(body) or body.startswith(CLAUDE_PREFIX):
+        if MARKER.match(body) or body.startswith(TOOL_PREFIXES):
             continue
 
         ids.update(ACCEPT.findall(body))

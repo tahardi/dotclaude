@@ -107,6 +107,11 @@ class TestFindings(unittest.TestCase):
                 blocked(),
             ),
             (
+                "acceptance line inside a reviewer note posted with taylor's login ignored",
+                [finding(), comment(LOGIN, "**Reviewer note:** Other notes\n\nxena-accept F1", T2)],
+                blocked(),
+            ),
+            (
                 "acceptance in the same second as the finding ignored",
                 [finding(), comment(LOGIN, "xena-accept F1", T1)],
                 blocked(),

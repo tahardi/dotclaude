@@ -76,7 +76,7 @@ If rules 1 and 2 conflict, stop and ask the user.
      4. A failed post never stops the card. If step 2's `gh api` fails, run step 3 with `/dev/null` in place of the
         diff, so every note goes in the PR comment with its file and line. If `gh pr comment` fails, try it once more. If it
         still fails, use `gh pr edit` to make the "Reviewer notes" line match what was posted, and put the unposted
-        notes in the step 15 report.
+        notes in the step 16 report.
 12. **Comment on the card:** `jira.py comment KEY "PR: <url>"`.
 13. **Watch CI.**
     - Wait until `gh pr checks <number>` lists checks. They can take up to a minute to appear.

@@ -81,7 +81,8 @@ If rules 1 and 2 conflict, stop and ask the user.
 14. **After CI passes,** do any card steps that depend on a CI run, such as adding required status checks to the ruleset. If a step needs permissions you don't have, add it to "Needs Taylor".
 15. **Finish.**
     - Run `jira.py transition KEY "In Review"`.
-    - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, and reviewer notes.
+    - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, and reviewer notes,
+      each with the file and line it is on.
     - Report to the user in the same order: the PR URL, the CI status, deviations, Needs Taylor, card impacts, and
       reviewer notes, each with the file and line it is on and a link to the PR for replies. Then list the tests, and
       the tests Self-Review added.

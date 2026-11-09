@@ -33,7 +33,9 @@ test_desktop_links_files() {
 		"skills/card:skills/card" \
 		"skills/project:skills/project" \
 		"skills/refine:skills/refine" \
-		"skills/retro:skills/retro"; do
+		"skills/retro:skills/retro" \
+		"skills/audit:skills/audit" \
+		"skills/repo-security-review:skills/repo-security-review"; do
 		src=$repo/${pair%%:*}
 		dst=$claude_dir/${pair#*:}
 		[[ "$(readlink "$dst")" == "$src" ]] || { fail "${FUNCNAME[0]}" "$dst does not link to $src"; return; }
@@ -103,6 +105,9 @@ test_vm_installs_managed_files() {
 		"CLAUDE.md:CLAUDE.md" \
 		"skills/card/SKILL.md:.claude/skills/card/SKILL.md" \
 		"skills/card/scripts/jira.py:.claude/skills/card/scripts/jira.py" \
+		"skills/card/scripts/security_findings.py:.claude/skills/card/scripts/security_findings.py" \
+		"skills/audit/SKILL.md:.claude/skills/audit/SKILL.md" \
+		"skills/repo-security-review/SKILL.md:.claude/skills/repo-security-review/SKILL.md" \
 		"skills/retro/SKILL.md:.claude/skills/retro/SKILL.md"; do
 		src=$repo/${pair%%:*}
 		dst=$managed_dir/${pair#*:}

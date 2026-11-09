@@ -69,26 +69,37 @@ def general_comment(notes: list[dict], diff: str) -> str:
     if not general:
         return ""
     items = [f"{i}. {location(note)}{note['text']}" for i, note in enumerate(general, start=1)]
-    return f"{MARKER} notes on the whole PR\n\n" + "\n".join(items)
+    return f"{MARKER} Other notes\n\n" + "\n".join(items)
+
+
+def review_output(notes: list[dict], diff: str, commit: str) -> str:
+    payload = review_payload(notes, diff, commit)
+    return json.dumps(payload) if payload else ""
 
 
 def read_inputs(notes_path: str, diff_path: str) -> tuple[list[dict], str]:
-    return json.loads(Path(notes_path).read_text()), Path(diff_path).read_text(encoding="utf-8", errors="replace")
+    try:
+        notes = json.loads(Path(notes_path).read_text())
+        diff = Path(diff_path).read_text(encoding="utf-8", errors="replace")
+    except (OSError, ValueError) as error:
+        raise ValueError(f"reading notes: {error}") from error
+    if not isinstance(notes, list) or not all(isinstance(note, dict) for note in notes):
+        raise ValueError("reading notes: expected a list of notes")
+    return notes, diff
 
 
 def main() -> None:
     args = sys.argv[1:]
-    if len(args) == 4 and args[0] == "review":
-        payload = review_payload(*read_inputs(args[1], args[2]), args[3])
-        if payload:
-            print(json.dumps(payload))
-    elif len(args) == 3 and args[0] == "comment":
-        comment = general_comment(*read_inputs(args[1], args[2]))
-        if comment:
-            print(comment)
-    else:
+    if not ((len(args) == 4 and args[0] == "review") or (len(args) == 3 and args[0] == "comment")):
         print(USAGE, file=sys.stderr)
         sys.exit(2)
+    try:
+        notes, diff = read_inputs(args[1], args[2])
+        output = review_output(notes, diff, args[3]) if args[0] == "review" else general_comment(notes, diff)
+    except ValueError as error:
+        sys.exit(str(error))
+    if output:
+        print(output)
 
 
 if __name__ == "__main__":

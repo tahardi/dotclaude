@@ -9,7 +9,7 @@ from unittest import mock
 
 from review_notes import USAGE, general_comment, main, review_payload
 
-HEADER = "**Reviewer note:** notes on the whole PR"
+HEADER = "**Reviewer note:** Other notes"
 
 DIFF = """diff --git a/a.py b/a.py
 --- a/a.py
@@ -216,6 +216,16 @@ class ReviewPayloadTest(unittest.TestCase):
 
 
 class GeneralCommentTest(unittest.TestCase):
+    def test_general_comment_with_no_diff_takes_every_note(self):
+        # given
+        notes = [{"path": "a.py", "line": 2, "text": "why 5?"}]
+
+        # when
+        got = general_comment(notes, "")
+
+        # then
+        self.assertEqual(got, f"{HEADER}\n\n1. `a.py:2` why 5?")
+
     def test_general_comment_rejects_a_note_without_text(self):
         # given
         notes = [{"path": None, "line": None, "text": "ok"}, {"path": None, "line": None, "text": " "}]
@@ -315,26 +325,33 @@ class MainTest(unittest.TestCase):
     def test_main_stops_on_unreadable_notes(self):
         # given
         cases = [
-            ("missing notes file", None, FileNotFoundError),
-            ("notes file is not JSON", "{", json.JSONDecodeError),
+            ("missing notes file", "comment", None, "reading notes: "),
+            ("notes file is not JSON", "comment", "{", "reading notes: "),
+            ("notes file is not JSON on review", "review", "{", "reading notes: "),
+            ("notes are not a list", "comment", "{}", "reading notes: expected a list of notes"),
+            ("a note is not an object", "comment", "[1]", "reading notes: expected a list of notes"),
+            ("a note has no text", "comment", "[{}]", "reading notes: note 1 has no text"),
         ]
-        for name, notes_text, error in cases:
+        for name, command, notes_text, expected in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 _, diff_path = self.write_files(directory, [])
                 notes_path = Path(directory) / "notes.json"
                 notes_path.unlink()
                 if notes_text is not None:
                     notes_path.write_text(notes_text)
+                extra = ["abc123"] if command == "review" else []
+                argv = ["review_notes.py", command, str(notes_path), diff_path, *extra]
 
                 # when
                 stdout = io.StringIO()
-                with self.assertRaises(error), mock.patch.object(
-                    sys, "argv", ["review_notes.py", "comment", str(notes_path), diff_path]
-                ), redirect_stdout(stdout):
+                with self.assertRaises(SystemExit) as caught, mock.patch.object(sys, "argv", argv), redirect_stdout(
+                    stdout
+                ):
                     main()
 
                 # then
                 self.assertEqual(stdout.getvalue(), "")
+                self.assertTrue(str(caught.exception.code).startswith(expected), caught.exception.code)
 
     def test_main_rejects_a_bad_command(self):
         cases = [

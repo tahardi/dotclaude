@@ -1,3 +1,4 @@
+import fnmatch
 import json
 import os
 import re
@@ -155,8 +156,29 @@ class TestVmSettings(unittest.TestCase):
             results = [(name, f["name"], feature_off(f, DESKTOP, home)) for name, f in features]
 
         allow_write = [p.replace("~", "/home/bear", 1) for p in settings["sandbox"]["filesystem"]["allowWrite"]]
+        network = settings["sandbox"]["network"]
 
         # then
+        self.assertIs(network.get("strictAllowlist"), True, "leaving the allowlist unenforced")
+        for host in [
+            "github.com",
+            "api.github.com",
+            "taylorantoniohardin.atlassian.net",
+            "proxy.golang.org",
+            "sum.golang.org",
+            "vuln.go.dev",
+            "registry.npmjs.org",
+            "www.electronjs.org",
+            "index.crates.io",
+            "static.crates.io",
+            "static.rust-lang.org",
+            "huggingface.co",
+        ]:
+            self.assertIn(host, network["allowedDomains"], f"missing host {host}")
+        self.assertFalse(
+            any(fnmatch.fnmatch("storage.googleapis.com", domain) for domain in network["allowedDomains"]),
+            "allowing every Google Cloud Storage bucket",
+        )
         for name in ["GOPATH", "GOCACHE", "GOLANGCI_LINT_CACHE", "GOTMPDIR"]:
             value = settings["env"][name]
             self.assertTrue(value.startswith("/home/bear/.cache/claude-go/"), f"writing {name} outside claude-go")

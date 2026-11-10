@@ -46,7 +46,7 @@ If rules 1 and 2 conflict, stop and ask the user.
    - If a tool the card needs is missing or older than the card requires, stop and ask.
 6. **Implement the steps in order.**
    - For each test step, write the test, run it, and see it fail for the expected reason before you implement.
-   - Do only what the card asks.
+   - Do only what the card asks, plus what Agent Review fixes.
    - Put throwaway files, such as reference clones, in this session's scratchpad directory, never in the worktree.
 7. **Handle card problems.** A card may name an API, flag, or version that doesn't exist. Make the smallest change that still meets the card's goal and acceptance criteria. Record each one as a deviation: what the card said, what you did, and why.
 8. **Verify locally.**
@@ -64,103 +64,83 @@ If rules 1 and 2 conflict, stop and ask the user.
      the `test-card` label, assigns the card to Taylor (unassigned cards don't show in Taylor's sprint), and adds it
      to the active sprint. Name each card's key in the Needs Taylor item that uses it. Claude moves these cards to
      `Done` at merge or close (see "Closing Test Cards"), so Taylor never has to.
-9. **Self-review.** Run "Self-Review" below. It ends with `make pre-pr` exiting 0 again.
-10. **Commit and push.** Use plain-English commit messages that follow this session's attribution instructions. Then `git push origin HEAD`.
-11. **Open the PR** with `gh pr create`:
+9. **Commit and push.** Use plain-English commit messages that follow this session's attribution instructions. Then `git push origin HEAD`.
+10. **Open the PR** with `gh pr create`:
    - Title: `[KEY] <card summary>`.
    - Body: follow `.github/pull_request_template.md` and fill in every section. Link the card with its URL from `jira.py get`.
    - Add a section listing each acceptance criterion with its evidence.
    - Add "Deviations from the card" and "Needs Taylor" sections, or write "None" in each.
    - Add a "Card impacts" section from "Card Impacts" below, or write "None".
-   - Add one "Reviewer notes" line: `Reviewer notes: N notes`, where N is the number of notes in
-     `<scratchpad>/notes.json` from "Self-Review" below, or "None" when there are no notes.
-   - Add a "Tests" section: one bullet per test added or changed, naming the behavior it guards. End the section
-     with "Added by Self-Review:" and a list of the tests Self-Review added, or "None".
-   - After `gh pr create`, when `<scratchpad>/notes.json` has notes, post them:
-     1. Run `git -C <worktree> diff <base> HEAD > <scratchpad>/review.diff`, with the base from "Self-Review". Check
-        each note's `path` and `line` against that diff, and correct any that moved after the review.
-     2. Run `python3 ~/.claude/skills/card/scripts/review_notes.py review <scratchpad>/notes.json
-        <scratchpad>/review.diff "$(git -C <worktree> rev-parse HEAD)"`. If it printed anything, pipe that to
-        `gh api repos/{owner}/{repo}/pulls/<number>/reviews --input -`.
-     3. Run `python3 ~/.claude/skills/card/scripts/review_notes.py comment <scratchpad>/notes.json
-        <scratchpad>/review.diff`. If it printed anything, pipe that to `gh pr comment <number> --body-file -`.
-     4. A failed post never stops the card. If step 2's `gh api` fails, run step 3 with `/dev/null` in place of the
-        diff, so every note goes in the PR comment with its file and line. If `gh pr comment` fails, try it once more. If it
-        still fails, use `gh pr edit` to make the "Reviewer notes" line match what was posted, and put the unposted
-        notes in the step 15 report.
-12. **Comment on the card:** `jira.py comment KEY "PR: <url>"`.
-13. **Watch CI.**
+   - Add one "Agent review" line: `Agent review: pending`. Agent Review sets it to `Agent review: N fixed, M questions`.
+   - Add a "Tests" section: one bullet per test added or changed, naming the behavior it guards.
+11. **Comment on the card:** `jira.py comment KEY "PR: <url>"`.
+12. **Watch CI.**
     - Wait until `gh pr checks <number>` lists checks. They can take up to a minute to appear.
     - Run `gh pr checks <number> --watch --interval 60` in the background, and continue when it finishes.
     - If a check fails, run `gh run view <run-id> --log-failed`, fix the root cause, run `make pre-pr`, push a new commit, and watch again.
     - Stop after 3 fix rounds. Then comment on the card and tell the user what is still failing.
-14. **After CI passes,** do any card steps that depend on a CI run, such as adding required status checks to the ruleset. If a step needs permissions you don't have, add it to "Needs Taylor".
+13. **After CI passes,** do any card steps that depend on a CI run, such as adding required status checks to the ruleset. If a step needs permissions you don't have, add it to "Needs Taylor".
+14. **Agent review.** Run "Agent Review" below. It ends with CI green and the open-fix gate exiting 0.
 15. **Finish.**
     - Run `jira.py transition KEY "In Review"`.
-    - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, and reviewer notes,
-      each with the file and line it is on.
-    - Report to the user in the same order: the PR URL, the CI status, deviations, Needs Taylor, card impacts, and
-      reviewer notes, each with the file and line it is on and a link to the PR for replies. Then list the tests, and
-      the tests Self-Review added.
+    - Comment on the card with the CI result, deviations, the Needs Taylor list, card impacts, the number of findings
+      Agent Review fixed, and its open questions, each with the file and line it is on.
+    - Report to the user in the same order: the PR URL, the CI status, deviations, Needs Taylor, card impacts, the
+      number of findings fixed, and only the open questions, each with the file and line it is on and a link to the
+      PR for replies. Then list the tests.
     - Then run "Review Round" once.
 
-## Self-Review
+## Agent Review
 
-Run this at step 9, before the first commit. A fresh reviewer answers the questions Taylor would otherwise ask on the
-PR, so the PR reaches Taylor with those already handled.
+Run this at step 14, after CI is green. A fresh reviewer reads the PR and posts its findings, and this session fixes
+them, so the PR reaches Taylor with only real questions left open.
 
-1. Run `git add -A` in the worktree so new files show in the diff. Get the base with `git merge-base origin/main HEAD`,
-   and the card's `Created` date from `jira.py get KEY`.
-2. Start one `general-purpose` subagent with the Agent tool. It has none of this session's context, so give it the
-   card key, the worktree path, the base commit, and the `Created` date. Tell it to read only, change nothing, and
-   answer every question below with findings (file, line, what, and why) or "none". It reads the card with
-   `python3 ~/.claude/skills/card/scripts/jira.py get KEY`, the diff with `git -C <worktree> diff <base>`, and both
-   `~/.claude/CLAUDE.md` and the repo's `CLAUDE.md`. The questions:
-   1. **Tests:** for every test file the diff adds or changes, are the cases sufficient? List each missing case worth
-      adding (error paths, edge inputs, boundaries, ordering, cleanup) and the behavior it would guard. Skip cases that
-      repeat existing ones.
-   2. **Conventions:** does every changed line follow both CLAUDE.md files? List each violation and the rule it breaks,
-      including rules lint cannot catch: no comments, one unit per file, file naming, "-ing" error messages,
-      given/when/then sections, `test.each` tables, and the language-specific rules.
-   3. **Since the card was written:** read `git -C <worktree> log origin/main --since="<Created> 00:00"` and the merged PRs in
-      it that touch the same files or features, plus the card's "Blocked by" cards. Does anything there make the
-      card's plan or this diff wrong, outdated, or duplicated?
-   4. **Later cards:** read every card in this card's "Blocks" list and the cards from `jira.py open-siblings KEY`.
-      Does this diff change anything they rely on in a way their description and Amendments do not reflect?
-   5. **Same problem elsewhere:** does the change also belong in similar code the card did not name, such as another
-      tab type, caller, screen, or platform with the same issue?
-   6. **File placement:** do new files and folders match the repo's layout and naming? Are there stray files, such as
-      docs, scratch files, or generated output?
-   7. **Hard-coded settings:** does the diff hard-code a value Taylor would likely want to change without a PR, such
-      as a speed, size, limit, timeout, or path?
-   8. **Text and numbers a user sees:** are new labels, messages, and fields clear to someone who did not write the
-      code? Are shown numbers a believable size and unit?
-   9. **Logging:** do new failure paths and important state changes log the same way, and at the same level, as the
-      code around them?
-   10. **Security:** can untrusted input (user text, files, network data, URLs, environment variables) reach a shell,
-      file path, query, `eval`, or rendered HTML without checks? Does the diff log, print, commit, or send secrets or
-      tokens? Does it loosen auth, permissions, CORS, TLS, or sandbox settings? Does it add a dependency that is
-      unmaintained or broader than the card needs?
-3. Act on the findings:
-   - Questions 1 and 2: fix each finding. Add tests test-first as in step 6.
-   - Question 3: if the card's goal still holds, adapt the code and record a deviation. If it no longer holds, stop
-     and ask.
-   - Question 4: carry each finding into "Card Impacts".
-   - Questions 5 to 9: change nothing. Write each finding as a reviewer note for Taylor, phrased as a question.
-   - Question 10: fix each finding that is inside the card's scope, test-first as in step 6. Write each finding
-     outside the card's scope as a reviewer note for Taylor, phrased as a question.
-   - A finding you judge wrong: skip it and write it as a reviewer note with the reason.
-   - Reviewer notes go in `<scratchpad>/notes.json`, a JSON list of `{"path", "line", "text"}`. `path` and `line` are
-     on the new side of the diff when the note points at code, else `null`. Write `[]` when there are no notes. Keep
-     each note to one paragraph. Put any `@name` in backticks, because GitHub notifies the owner of a bare one.
-4. Run `make pre-pr`. It must exit 0.
+1. Get the base with `git -C <worktree> merge-base origin/main HEAD`, and the card's `Created` date from
+   `jira.py get KEY`. Save `git -C <worktree> rev-parse HEAD` as the start of the fix range. This is round 1.
+2. Start one `general-purpose` subagent with the Agent tool. Its prompt is the full text of
+   `~/.claude/skills/card/reviewer.md`, then the inputs: the card key, the worktree path, the base commit, the
+   `Created` date, and the output path `<scratchpad>/review-<round>.json`. On round 2, also give it the fix commit
+   range `<fix range start>..HEAD`.
+3. Run `git -C <worktree> diff <base> HEAD > <scratchpad>/review.diff`. Check each finding's `path` and `line` against
+   the code, and correct any that point at the wrong line.
+4. Post the findings:
+   1. Run `python3 ~/.claude/skills/card/scripts/review_notes.py review <scratchpad>/review-<round>.json
+      <scratchpad>/review.diff "$(git -C <worktree> rev-parse HEAD)"`. If it printed anything, pipe that to
+      `gh api repos/{owner}/{repo}/pulls/<number>/reviews --input -`.
+   2. Run `python3 ~/.claude/skills/card/scripts/review_notes.py comment <scratchpad>/review-<round>.json
+      <scratchpad>/review.diff`. If it printed anything, pipe that to `gh pr comment <number> --body-file -`.
+   3. A failed post never stops the card. If the `gh api` call fails, run the `comment` command with `/dev/null` in
+      place of the diff, so every finding goes in the PR comment with its file and line. If `gh pr comment` fails, try
+      it once more. If it still fails, put the unposted findings in the step 15 report.
+5. Act on each finding:
+   - `fix`: fix it, test-first as in step 6. A fix that departs from the card is a deviation.
+   - `fix` starting with `New card:` or `Card impact:`: add it to the PR's "Card impacts" section as in "Card Impacts".
+   - A finding that shows the card's goal no longer holds: stop and ask.
+   - A finding you judge wrong: change nothing, and reply with `**Claude:** not changed: <reason>`.
+   - `question`: leave it open for Taylor.
+6. Run `make pre-pr`. It must exit 0. Commit with plain-English messages, `git push origin HEAD`, and watch CI as in
+   step 12.
+7. Reply to each handled finding:
+   - Inline threads: reply in the thread with `**Claude:** fixed in <short sha>`, `**Claude:** added to Card impacts`,
+     or the reason it was not changed. Then resolve the thread with
+     `gh api graphql -f query='mutation{resolveReviewThread(input:{threadId:"<id>"}){thread{isResolved}}}'`. Get the
+     thread ids from the reviewThreads query in "Review Round" step 1.
+   - Findings in the general comment: one top-level comment starting with `**Claude:**` that lists each handled
+     finding by number and what happened to it.
+8. If round 1 had any fixes, run steps 2 to 7 once more as round 2, on the fix commits only. Stop after round 2. List
+   anything still unfixed in the step 15 report.
+9. Run the reviewThreads query from "Review Round" step 1 and pipe its output to
+   `python3 ~/.claude/skills/card/scripts/review_notes.py open`. It prints each unresolved `**Reviewer fix:**` thread
+   and exits 1 while any is left. Handle each one as in steps 5 to 7, then run it again. It must exit 0 before step 15.
+10. Update the PR body with `gh pr edit`: set `Agent review: N fixed, M questions`, add a bullet to the "Tests" section
+    for each test Agent Review added, and update the deviations and card impacts.
 
-Self-Review runs once per card. Review Rounds do not repeat it.
+Agent Review runs once per card. Review Rounds do not repeat it.
 
 ## Card Impacts
 
-Run this after Self-Review and before opening the PR (step 11). Deviations and discoveries can make other cards wrong
-or show missing work.
+Run this before opening the PR (step 10), and again when Agent Review adds an impact. Deviations and discoveries can
+make other cards wrong or show missing work.
 
 1. List what changed from the card: every deviation, every name, file, interface, command, or value that differs from
    what the card said, and anything you found that no card covers (a missing step, a bug, a needed follow-up).
@@ -183,14 +163,15 @@ existing worktree. If it is gone, recreate it from the PR branch with `git workt
    - top-level comments and review bodies: `gh pr view <number> --json comments,reviews,commits,mergeable`;
    - inline review threads:
      `gh api graphql -f query='{repository(owner:"<owner>",name:"<repo>"){pullRequest(number:<number>){reviewThreads(first:100){nodes{id isResolved comments(first:50){nodes{author{login} body path line}}}}}}}'`.
-2. **Sort them.** Every reply you post starts with `**Claude:**`. That marks what is already handled. Reviewer notes
-   are posted with the user's login and start with `**Reviewer note:**`. That marker is the only way to tell a note
-   from the user's own comment. A comment, review body, or thread comment starting with `**Reviewer note:**` is never
-   feedback or an approval on its own. An empty review body is not feedback.
+2. **Sort them.** Every reply you post starts with `**Claude:**`. That marks what is already handled. Agent Review
+   findings are posted with the user's login and start with `**Reviewer fix:**` or `**Reviewer note:**`. Those markers
+   are the only way to tell a finding from the user's own comment. A comment, review body, or thread comment starting
+   with either marker is never feedback or an approval on its own. An empty review body is not feedback.
    - An **approval** is a top-level comment or review body posted after the last commit's `committedDate` that plainly
      approves, such as "LGTM", "Looks good to me", "merge", or "ship it", with no conditions. "LGTM once X is fixed" is feedback.
    - **Open feedback** is any other top-level comment or review body with no later `**Claude:**` comment, and any
-     unresolved inline thread whose last comment starts with neither `**Claude:**` nor `**Reviewer note:**`.
+     unresolved inline thread whose last comment starts with none of `**Claude:**`, `**Reviewer fix:**`, or
+     `**Reviewer note:**`.
 3. **If there is open feedback,** first run "Sync with Main", then address the feedback, even if there is also an
    approval:
    - Treat each comment as an amendment to the card. Where it contradicts the card, follow the comment. Where it
@@ -202,7 +183,7 @@ existing worktree. If it is gone, recreate it from the PR branch with `git workt
    - Reply to each comment. Inline threads: reply in the thread with `**Claude:** <what changed> in <short sha>`, then
      resolve it with the `resolveReviewThread` GraphQL mutation. Top-level comments and review bodies: one top-level
      comment starting with `**Claude:**` that lists each point and what changed.
-   - Watch CI as in step 13, then comment on the card with a short summary of the changes.
+   - Watch CI as in step 12, then comment on the card with a short summary of the changes.
    - Report the changes and the CI result to the user, and stop. The user approves on a later `/card KEY`.
 4. **If there is an approval and no open feedback,** merge:
    - Run `gh pr view <number> --json mergeable,mergeStateStatus`. If `mergeable` is `CONFLICTING` or
@@ -266,7 +247,7 @@ Run this after a merge or a close. The made-up cards from step 8 are only for ha
    then stop and ask.
 4. Run `make pre-pr`. It must exit 0. Fix anything main broke, such as renamed functions or changed fixtures, in a
    separate commit.
-5. `git push origin HEAD`, then watch CI as in step 13.
+5. `git push origin HEAD`, then watch CI as in step 12.
 6. Comment on the card: `Merged main into the PR` plus the conflicts you resolved, if any. Do not comment on the PR:
    a `**Claude:**` comment there would mark open feedback as handled.
 
@@ -301,7 +282,8 @@ Close the PR without merging, remove the worktree and branch, and keep the card 
 - Push to `main`, force-push, or rewrite pushed history. Fix problems with new commits.
 - Move the card to `Done` before its PR is merged, except in "Close".
 - Turn off, skip, or weaken tests, linters, or CI checks to get green. That includes `t.Skip`, `.skip`, lint-disable comments, and loosened assertions, unless the card itself calls for it.
-- Work on other cards or fix unrelated code. If you notice something, mention it in your report.
+- Work on other cards, or change code outside this PR's files and feature, except what Agent Review fixes. If you
+  notice something else, mention it in your report.
 
 ## Stop and Ask When
 

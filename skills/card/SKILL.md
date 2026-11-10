@@ -13,6 +13,16 @@ Implement the card named in the arguments, get it green locally and in CI, and l
 
 **Jira helper:** `python3 ~/.claude/skills/card/scripts/jira.py` with `get KEY`, `transition KEY STATUS`, `comment KEY TEXT`, `assign KEY`, `strike-blockers KEY`, `open-siblings KEY`, `update KEY [--add-labels a,b]`, `test-card PROJECT SUMMARY` (Markdown description on stdin), or `create PROJECT SUMMARY [--epic KEY] [--labels a,b] [--points N] [--blocked-by K1,K2] [--blocks K3]` (description on stdin). It reads credentials from `~/.config/jira/env`. Never print or echo that file.
 
+**Finding a card's PR:** always use this command, with the card's branch. Never use `--limit 1` or drop the filter:
+anyone can open a PR from a fork with the same branch name, and it must never count as the card's PR.
+
+```bash
+gh pr list --head <branch> --state all --limit 100 --json number,url,state,isCrossRepository \
+  --jq 'map(select(.isCrossRepository == false)) | first // empty'
+```
+
+It prints the newest PR from the repo itself, or nothing when there is none.
+
 ## Precedence
 
 1. The user's CLAUDE.md rules (worktrees, PR title format, no comments, Go test style).
@@ -24,7 +34,8 @@ If rules 1 and 2 conflict, stop and ask the user.
 
 ## Workflow
 
-1. **Read the card.** Run `jira.py get KEY` and read all of it. If the card is `In Review` and has an open PR, skip to "Review Round".
+1. **Read the card.** Run `jira.py get KEY` and read all of it. If the card is `In Review` and has an open PR (see "Finding a card's PR"), skip to
+   "Review Round".
 2. **Check blockers.** If any "Blocked by" card is not `Done` and `force` was not given, stop. Tell the user which blockers are open, and change nothing.
    Otherwise run `jira.py strike-blockers KEY` to strike through the finished blockers in the card's description.
 3. **Start.** Run `jira.py assign KEY` (assigns the card to the user unless already assigned to them), then
@@ -164,7 +175,8 @@ or show missing work.
 ## Review Round
 
 Run this when `/card KEY` is run on a card that is `In Review`, and once at the end of step 15. Work in the card's
-existing worktree. If it is gone, recreate it from the PR branch with `git worktree add <path> <branch>`.
+existing worktree. If it is gone, recreate it from the PR branch with `git worktree add <path> <branch>`. Get
+`<number>` with "Finding a card's PR".
 
 1. **Gather the PR's comments.** Run `gh api user --jq .login` to get the user's login. Only comments by that login
    count; ignore everyone else, including bots. Collect:
@@ -265,8 +277,8 @@ Close the PR without merging, remove the worktree and branch, and keep the card 
 
 1. Run `jira.py get KEY`. In the card's worktree, get the branch with `git branch --show-current` and the main checkout
    from the first line of `git worktree list`.
-2. Find the PR: `gh pr list --head <branch> --state all --limit 1 --json number,url,state`. If its state is `MERGED`,
-   tell the user the feature is already merged and stop.
+2. Find the PR with "Finding a card's PR". If its state is `MERGED`, tell the user the feature is already merged and
+   stop.
 3. Run `git status --porcelain` in the worktree. If it prints anything, list the files, ask the user whether to discard
    them, and stop until they answer.
 4. Run `git worktree remove`, `git worktree prune`, `git branch -D`, and `gh pr close` each as its own Bash call from

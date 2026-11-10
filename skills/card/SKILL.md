@@ -51,8 +51,8 @@ If rules 1 and 2 conflict, stop and ask the user.
    - If a Needs Taylor check needs made-up cards, create each one with `jira.py test-card PROJECT SUMMARY`, with
      a description that has whatever the check needs (headings, lists, and so on). It adds the `[TEST]` prefix and
      the `test-card` label, assigns the card to Taylor (unassigned cards don't show in Taylor's sprint), and adds it
-     to the active sprint. Name each card's key in the Needs Taylor item that uses it, and say to move it to `Done`
-     afterward.
+     to the active sprint. Name each card's key in the Needs Taylor item that uses it. Claude moves these cards to
+     `Done` at merge or close (see "Closing Test Cards"), so Taylor never has to.
 9. **Self-review.** Run "Self-Review" below. It ends with `make pre-pr` exiting 0 again.
 10. **Commit and push.** Use plain-English commit messages that follow this session's attribution instructions. Then `git push origin HEAD`.
 11. **Open the PR** with `gh pr create`:
@@ -210,7 +210,9 @@ existing worktree. If it is gone, recreate it from the PR branch with `git workt
      nothing. Delete any leftover with `git branch -D <branch>` or `git push origin --delete <branch>`.
    - Run `jira.py transition KEY "Done"`, then `jira.py comment KEY "Merged: <PR url>"`.
    - Apply the PR's "Card impacts" as in "Applying Card Impacts", unless the section says "None".
-   - Report the merge, the cleanup, the card status, and the applied impacts (with any new card keys) to the user.
+   - Move the card's test cards to `Done` as in "Closing Test Cards".
+   - Report the merge, the cleanup, the card status, the applied impacts (with any new card keys), and the test cards
+     moved to `Done` to the user.
 5. **If there is neither,** run "Sync with Main". If the branch was already up to date, tell the user the PR is
    waiting for review, and stop. Otherwise report the sync and the CI result, and stop.
 
@@ -230,6 +232,17 @@ reviewed it with the code.
    an `## Amendments` heading at the end of that note (create the heading if missing), using the obsidian-notes skill:
    `- YYYY-MM-DD KEY: <impact>, applied as <OTHER key or new key>`.
 4. Comment on this card listing each impact and where it was applied.
+
+### Closing Test Cards
+
+Run this after a merge or a close. The made-up cards from step 8 are only for hand testing, so they end with the card.
+
+1. Collect the card keys named in the PR's "Needs Taylor" section (`gh pr view <number> --json body`). With no PR,
+   use the test cards this session created.
+2. For each key, run `jira.py get <OTHER>`. Skip it unless its summary starts with `[TEST]` and its labels include
+   `test-card`, so a real card named in the section is never closed.
+3. Run `jira.py transition <OTHER> "Done"` for each card that is not already `Done`.
+4. Comment on this card listing the test cards moved to `Done`, or skip the comment when there were none.
 
 ### Sync with Main
 
@@ -266,7 +279,9 @@ Close the PR without merging, remove the worktree and branch, and keep the card 
 8. Run `jira.py transition KEY "Done"` and `jira.py update KEY --add-labels wont-do`. Then run
    `jira.py comment KEY "Closed without merging: <PR url>"`, or
    `jira.py comment KEY "Closed without merging; no PR was opened."` when there was no PR.
-9. Report to the user: the PR closed (or none), the worktree and branches removed, and the card status and label.
+9. Move the card's test cards to `Done` as in "Closing Test Cards".
+10. Report to the user: the PR closed (or none), the worktree and branches removed, the card status and label, and the
+    test cards moved to `Done`.
 
 ## Never
 

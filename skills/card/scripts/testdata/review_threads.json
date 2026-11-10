@@ -1,0 +1,59 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_open_fix",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {"author": {"login": "tahardi"}, "body": "**Reviewer fix:** guard None", "path": "a.py", "line": 4}
+                ]
+              }
+            },
+            {
+              "id": "PRRT_resolved_fix",
+              "isResolved": true,
+              "comments": {
+                "nodes": [
+                  {"author": {"login": "tahardi"}, "body": "**Reviewer fix:** add a test", "path": "a.py", "line": 9},
+                  {"author": {"login": "tahardi"}, "body": "**Claude:** fixed in abc1234", "path": "a.py", "line": 9}
+                ]
+              }
+            },
+            {
+              "id": "PRRT_open_note",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {"author": {"login": "tahardi"}, "body": "**Reviewer note:** rename?", "path": "b.py", "line": 2}
+                ]
+              }
+            },
+            {
+              "id": "PRRT_open_taylor",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {"author": {"login": "tahardi"}, "body": "Use a set here", "path": "b.py", "line": 7}
+                ]
+              }
+            },
+            {
+              "id": "PRRT_replied_fix",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {"author": {"login": "tahardi"}, "body": "**Reviewer fix:** log it", "path": "c.py", "line": null},
+                  {"author": {"login": "tahardi"}, "body": "**Claude:** fixed in def5678", "path": "c.py", "line": null}
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

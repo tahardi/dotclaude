@@ -24,7 +24,7 @@ Read every PR merged in the last 7 days across Taylor's repos, find feedback tha
 4. **Target.** Pick the repo and file for each pattern:
    - A rule about one repo's code, tests, or layout: that repo's `CLAUDE.md`.
    - A preference that holds in every repo (style, writing, Go tests, PR titles): dotclaude's `CLAUDE.md`.
-   - A problem with how sessions work (missed self-review check, PR body, CI, review rounds): dotclaude's `skills/card/SKILL.md`.
+   - A problem with how sessions work (missed Agent Review finding, PR body, CI, review rounds): dotclaude's `skills/card/SKILL.md`.
    - A card that was missing a fact or named something wrong, seen as repeated "Deviations from the card" or "Card impacts": dotclaude's `skills/refine/SKILL.md`.
 
    Read the file with `git -C <repo> fetch origin && git -C <repo> show origin/main:<file>`. If it already has the rule, sharpen that line instead of adding a duplicate. If the file does not exist, propose creating it with the one new line.

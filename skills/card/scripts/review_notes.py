@@ -42,8 +42,9 @@ def check_notes(notes: list[dict]) -> None:
     for i, note in enumerate(notes, start=1):
         if not (note.get("text") or "").strip():
             raise ValueError(f"reading notes: note {i} has no text")
-        if note.get("kind", "question") not in KINDS:
-            raise ValueError(f"reading notes: note {i} has unknown kind {note['kind']}")
+        kind = note.get("kind", "question")
+        if not isinstance(kind, str) or kind not in KINDS:
+            raise ValueError(f"reading notes: note {i} has unknown kind {kind}")
 
 
 def marker(note: dict) -> str:

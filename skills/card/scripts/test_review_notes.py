@@ -235,14 +235,23 @@ class ReviewPayloadTest(unittest.TestCase):
 
     def test_review_payload_rejects_an_unknown_kind(self):
         # given
-        notes = [{"path": None, "line": None, "text": "ok"}, {"path": None, "line": None, "text": "x", "kind": "x"}]
+        cases = [
+            ("unknown word", "x", "x"),
+            ("list", ["fix"], "['fix']"),
+            ("object", {"fix": 1}, "{'fix': 1}"),
+            ("null", None, "None"),
+        ]
+        for name, kind, shown in cases:
+            with self.subTest(name):
+                good = {"path": None, "line": None, "text": "ok"}
+                notes = [good, {"path": None, "line": None, "text": "x", "kind": kind}]
 
-        # when
-        with self.assertRaises(ValueError) as caught:
-            review_payload(notes, DIFF, "abc123")
+                # when
+                with self.assertRaises(ValueError) as caught:
+                    review_payload(notes, DIFF, "abc123")
 
-        # then
-        self.assertEqual(str(caught.exception), "reading notes: note 2 has unknown kind x")
+                # then
+                self.assertEqual(str(caught.exception), f"reading notes: note 2 has unknown kind {shown}")
 
 
 class GeneralCommentTest(unittest.TestCase):

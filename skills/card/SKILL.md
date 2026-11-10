@@ -46,7 +46,7 @@ If rules 1 and 2 conflict, stop and ask the user.
    - If a tool the card needs is missing or older than the card requires, stop and ask.
 6. **Implement the steps in order.**
    - For each test step, write the test, run it, and see it fail for the expected reason before you implement.
-   - Do only what the card asks.
+   - Do only what the card asks, plus what Agent Review fixes.
    - Put throwaway files, such as reference clones, in this session's scratchpad directory, never in the worktree.
 7. **Handle card problems.** A card may name an API, flag, or version that doesn't exist. Make the smallest change that still meets the card's goal and acceptance criteria. Record each one as a deviation: what the card said, what you did, and why.
 8. **Verify locally.**
@@ -96,11 +96,11 @@ Run this at step 14, after CI is green. A fresh reviewer reads the PR and posts 
 them, so the PR reaches Taylor with only real questions left open.
 
 1. Get the base with `git -C <worktree> merge-base origin/main HEAD`, and the card's `Created` date from
-   `jira.py get KEY`. This is round 1.
+   `jira.py get KEY`. Save `git -C <worktree> rev-parse HEAD` as the start of the fix range. This is round 1.
 2. Start one `general-purpose` subagent with the Agent tool. Its prompt is the full text of
    `~/.claude/skills/card/reviewer.md`, then the inputs: the card key, the worktree path, the base commit, the
    `Created` date, and the output path `<scratchpad>/review-<round>.json`. On round 2, also give it the fix commit
-   range `<last commit before the fixes>..HEAD`.
+   range `<fix range start>..HEAD`.
 3. Run `git -C <worktree> diff <base> HEAD > <scratchpad>/review.diff`. Check each finding's `path` and `line` against
    the code, and correct any that point at the wrong line.
 4. Post the findings:

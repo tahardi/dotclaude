@@ -99,13 +99,17 @@ Then one `## Epic: <Name>` per epic, and one card section per card under a headi
 (for example `### T-B2: SQLite Store`). Refer to other cards by their `T-` id; `cards.py` swaps in the Jira keys.
 Each section has, in order:
 
-- `**Goal:**` What changes, why, the design decisions, and what is out of scope. Cite `R-` ids it meets.
+- A summary for Taylor, three bullets in plain English with no file, function, or variable names and under 60
+  words in all: `- **Problem:**` what is missing or wrong, as Taylor would notice it; `- **Goal:**` what Taylor sees
+  or can do once it is done; `- **Done when:**` one to three short checks Taylor can make by hand. `cards.py`
+  puts it at the top of the card.
+- `**Details:**` What changes, why, the design decisions, and what is out of scope. Cite `R-` ids it meets.
 - `**Files:**` with `- Create:`, `- Modify:`, `- Delete:` lines, each path in backticks.
 - `- [ ] **Step 1: <Name> test.**` steps in pairs: a test that names the exact test names, inputs, and expected
   results, then the implementation that makes it pass (signatures, error messages starting with an "-ing" verb).
 - `**Acceptance criteria:**` the tests that pass, `Needs Taylor:` hand checks, and the pre-PR command exiting 0.
 
-Write each card for a less capable model working without this conversation. Points (1, 2, 3, 5, 8) measure the
+Below the summary, write each card for a less capable model working without this conversation. Points (1, 2, 3, 5, 8) measure the
 user's review effort: more for large diffs, security- or data-sensitive code, languages the user is new to, and
 on-device testing.
 

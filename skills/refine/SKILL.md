@@ -27,7 +27,13 @@ Rewrite every open card in the project labeled `needs-refinement` so the /card s
 
 ## Template
 
-Write plain text with `**bold**` and backticks, sections in this order and separated by blank lines:
+Write plain text with `**bold**` and backticks, sections in this order and separated by blank lines. The card opens
+with a summary for Taylor, who reads it in Jira and Maple; everything after it is for the session that implements
+the card.
+
+- **Problem:** <one or two sentences: what is wrong or missing, as Taylor would notice it>
+- **Goal:** <one or two sentences: what Taylor sees or can do once it is done>
+- **Done when:** <one to three short checks Taylor can make by hand, joined with semicolons>
 
 **Source:** <who asked and when>: "<the card's original text, trimmed>". <Taylor's answers that shaped it>. Builds on <Done cards it extends>.
 
@@ -39,7 +45,7 @@ Write plain text with `**bold**` and backticks, sections in this order and separ
 4. `<the repo's pre-PR command>` from the worktree root must exit 0.
 5. Open the PR titled `[<KEY>] <Summary in Title Case>`, fill in the PR template, and link this card.
 
-**Goal:** One dense paragraph: what changes for the user, what exists today (with the real function and file names), the design decisions and why, and what is out of scope.
+**Details:** One dense paragraph: what changes for the user, what exists today (with the real function and file names), the design decisions and why, and what is out of scope.
 
 **Files:**
 
@@ -57,6 +63,8 @@ Write plain text with `**bold**` and backticks, sections in this order and separ
 
 ## Rules
 
+- The summary is plain English for a human: no file, function, or variable names, no jargon, and under 60 words in
+  all. Someone who has not read the code should understand what the card is for.
 - Every path, function, and test you cite exists on `origin/main`, or the card creates it.
 - Steps come in pairs: a test step naming the exact `describe` and `test` names, then the implementation it drives.
 - Name function signatures and error messages; error messages start with an "-ing" verb.

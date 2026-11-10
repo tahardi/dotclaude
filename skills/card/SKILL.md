@@ -219,7 +219,9 @@ reviewed it with the code.
    `Card impact from`; `jira.py get` prints those comments as Amendments. Never edit another card's description.
 2. **New cards:** for each one, pipe its description to
    `jira.py create <PROJECT> "<summary>" --epic <epic> --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`.
-   Use the label `needs-refinement` unless the impact gave the card full steps and acceptance criteria. Add
+   Start the description with the three-bullet summary from the refine skill's Template (`- **Problem:**`,
+   `- **Goal:**`, `- **Done when:**`, plain English for Taylor). Use the label `needs-refinement` unless the impact
+   gave the card full steps and acceptance criteria. Add
    `parallelizable` only when the impact says so. Note the new key it prints.
 3. **The plan:** if the card's description names a plan note in the Obsidian vault, append one line per impact under
    an `## Amendments` heading at the end of that note (create the heading if missing), using the obsidian-notes skill:

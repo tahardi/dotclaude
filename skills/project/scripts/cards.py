@@ -14,6 +14,7 @@ USAGE = """usage:
 
 POINTS = {1, 2, 3, 5, 8}
 SCRIPT_LABELS = {"parallelizable", "needs-refinement"}
+SECTIONS = ("- **Problem:**", "- **Goal:**", "- **Done when:**", "**Details:**", "**Acceptance criteria:**")
 ADF_LIMIT = 30000
 CARD_HEADING = re.compile(r"^### (T-[A-Z]+\d+): (.+)$", re.M)
 REQ = re.compile(r"\bR-[A-Z]+-\d+\b")
@@ -127,7 +128,7 @@ def validate(manifest, plan, spec):
             errors.append(f"{cid}: plan has no heading '### {cid}: <Title>'")
             continue
         body = sections[cid][1]
-        for part in ("**Goal:**", "**Acceptance criteria:**"):
+        for part in SECTIONS:
             if part not in body:
                 errors.append(f"{cid}: plan section has no {part}")
         if c.get("workflow", True):
@@ -186,7 +187,10 @@ def describe(manifest, plan, row, keys):
     path = f"~/Documents/code/{repo}"
     branch = f"{lower}-{slug(row['title'])}"
     blockers = ", ".join(keys[b] for b in row.get("blocked_by", [])) or "none"
-    out = [f"**Plan:** {manifest['plan_ref']}, task {row['id']}.", "", f"**Blocked by:** {blockers}.", ""]
+    body = plan_cards(plan)[row["id"]][1]
+    summary, details = re.split(r"(?=^\*\*Details:\*\*)", body, maxsplit=1, flags=re.M)
+    out = [summary.strip(), "", f"**Plan:** {manifest['plan_ref']}, task {row['id']}.", ""]
+    out += [f"**Blocked by:** {blockers}.", ""]
     if row.get("workflow", True):
         setup = row.get("setup", manifest.get("setup"))
         setup = f" {setup}" if setup else ""
@@ -201,10 +205,9 @@ def describe(manifest, plan, row, keys):
             f"5. Open the PR titled `[{key}] {row['title']}`, fill in the PR template, and link this card.",
             "",
         ]
-    body = plan_cards(plan)[row["id"]][1]
-    out += [TASK_REF.sub(lambda m: keys.get(m.group(0), m.group(0)), body), "", "### Global Constraints", ""]
+    out += [details, "", "### Global Constraints", ""]
     out.append(global_constraints(plan))
-    return "\n".join(out)
+    return TASK_REF.sub(lambda m: keys.get(m.group(0), m.group(0)), "\n".join(out))
 
 
 def check(manifest_path):

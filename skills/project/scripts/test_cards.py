@@ -15,7 +15,11 @@ No comments.
 
 ### T-S1: Create Repo
 
-**Goal:** Make the repo (R-OPS-1).
+- **Problem:** Nothing to build on yet.
+- **Goal:** A first piece to build on.
+- **Done when:** It works.
+
+**Details:** Make the repo (R-OPS-1).
 
 **Acceptance criteria:**
 
@@ -23,7 +27,11 @@ No comments.
 
 ### T-S2: Server Skeleton
 
-**Goal:** Server with key auth (R-SEC-1). Uses the repo from T-S1.
+- **Problem:** Nothing to build on yet.
+- **Goal:** A first piece to build on.
+- **Done when:** It works.
+
+**Details:** Server with key auth (R-SEC-1). Uses the repo from T-S1.
 
 **Files:**
 
@@ -36,7 +44,11 @@ No comments.
 
 ### T-S3: Attack Store
 
-**Goal:** Store attacks (R-F-1).
+- **Problem:** Nothing to build on yet.
+- **Goal:** A first piece to build on.
+- **Done when:** It works.
+
+**Details:** Store attacks (R-F-1).
 
 **Files:**
 
@@ -49,7 +61,11 @@ No comments.
 
 ### T-S4: Attack Endpoint
 
-**Goal:** Endpoint.
+- **Problem:** Nothing to build on yet.
+- **Goal:** A first piece to build on.
+- **Done when:** It works.
+
+**Details:** Endpoint.
 
 **Files:**
 
@@ -104,7 +120,9 @@ class TestValidate(unittest.TestCase):
              "requirement R-PRIV-1 is in no card"),
             ("error - workflow card without files", MANIFEST, PLAN.replace("- Create: `internal/store/store.go`", ""),
              SPEC, "T-S3: plan section has no **Files:**"),
-            ("error - orphan plan task", MANIFEST, PLAN + "\n### T-S5: Extra\n\n**Goal:** x\n", SPEC,
+            ("error - section without summary", MANIFEST, PLAN.replace("- **Done when:** It works.\n", "", 1), SPEC,
+             "T-S1: plan section has no - **Done when:**"),
+            ("error - orphan plan task", MANIFEST, PLAN + "\n### T-S5: Extra\n\n**Details:** x\n", SPEC,
              "plan task T-S5 is not in the manifest"),
         ]
         for name, manifest, plan, spec, want in cases:
@@ -149,6 +167,10 @@ class TestDescribe(unittest.TestCase):
         manual = describe(MANIFEST, PLAN, rows["T-S1"], keys)
 
         # then
+        self.assertTrue(workflow.startswith("- **Problem:** Nothing to build on yet.\n"), workflow)
+        self.assertLess(workflow.index("- **Done when:**"), workflow.index("**Plan:**"))
+        self.assertLess(workflow.index("**Workflow:**"), workflow.index("**Details:** Server with key auth"))
+        self.assertTrue(manual.startswith("- **Problem:**"), manual)
         self.assertIn("**Blocked by:** HALO-11.", workflow)
         self.assertIn("worktree add ~/Documents/code/wts/halo-halo-12-server-skeleton -b halo-12-server-skeleton", workflow)
         self.assertIn("`[HALO-12] Server Skeleton`", workflow)

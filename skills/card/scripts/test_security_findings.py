@@ -178,6 +178,16 @@ class TestFindings(unittest.TestCase):
                 [finding(ID_40), comment(LOGIN, f"xena-accept {ID_41}", T2)],
                 blocked(ID_40, next_id=1),
             ),
+            (
+                "finding posted with taylor's login closed by his later acceptance",
+                [finding(login=LOGIN), comment(LOGIN, "xena-accept F1", T2)],
+                CLEAR,
+            ),
+            (
+                "edited finding still closed by a later acceptance",
+                [edited(finding(severity="low")), comment(LOGIN, "xena-accept F1", T2)],
+                CLEAR,
+            ),
             ("finding from another login counts", [finding(login="stranger")], blocked()),
             (
                 "fake low finding with the same id does not hide a high one",

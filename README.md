@@ -17,6 +17,6 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 
 `/card` runs a security pass after CI passes and posts findings as PR comments. An open high finding keeps the card out of In Review, and a finding closes only with Taylor's `xena-accept <id>` comment.
 
-When `/card` finds a PR Taylor merged, it treats the PR as approved and only cleans up: card to Done, worktree and branch removed.
+When `/card` finds a PR Taylor merged, it treats the PR as approved and skips review: card to Done, worktree and branch removed, the PR's card impacts applied (which can create new Jira cards), and its test cards moved to Done.
 
 Never commit secrets, tokens, memory files, or transcripts. `make pre-pr` runs shellcheck, the skill and script tests, the install script test, JSON and YAML syntax checks, and gitleaks. It needs shellcheck, Python 3 with PyYAML (`python3-yaml`), jq, and Go (for gitleaks).

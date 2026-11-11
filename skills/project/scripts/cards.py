@@ -14,7 +14,8 @@ USAGE = """usage:
 
 POINTS = {1, 2, 3, 5, 8}
 SCRIPT_LABELS = {"parallelizable", "needs-refinement"}
-SECTIONS = ("- **Problem:**", "- **Goal:**", "- **Done when:**", "**Details:**", "**Acceptance criteria:**")
+SECTIONS = ("- **Problem:**", "- **Goal:**", "- **Done when:**", "**Acceptance criteria:**")
+DETAILS = re.compile(r"^(?=\*\*Details:\*\*)", re.M)
 ADF_LIMIT = 30000
 CARD_HEADING = re.compile(r"^### (T-[A-Z]+\d+): (.+)$", re.M)
 REQ = re.compile(r"\bR-[A-Z]+-\d+\b")
@@ -131,6 +132,8 @@ def validate(manifest, plan, spec):
         for part in SECTIONS:
             if part not in body:
                 errors.append(f"{cid}: plan section has no {part}")
+        if not DETAILS.search(body):
+            errors.append(f"{cid}: plan section has no **Details:** at the start of a line")
         if c.get("workflow", True):
             if not files_of(body):
                 errors.append(f"{cid}: plan section has no **Files:** list with Create/Modify/Delete lines")
@@ -188,7 +191,8 @@ def describe(manifest, plan, row, keys):
     branch = f"{lower}-{slug(row['title'])}"
     blockers = ", ".join(keys[b] for b in row.get("blocked_by", [])) or "none"
     body = plan_cards(plan)[row["id"]][1]
-    summary, details = re.split(r"(?=^\*\*Details:\*\*)", body, maxsplit=1, flags=re.M)
+    body = TASK_REF.sub(lambda m: keys.get(m.group(0), m.group(0)), body)
+    summary, details = DETAILS.split(body, maxsplit=1)
     out = [summary.strip(), "", f"**Plan:** {manifest['plan_ref']}, task {row['id']}.", ""]
     out += [f"**Blocked by:** {blockers}.", ""]
     if row.get("workflow", True):
@@ -207,7 +211,7 @@ def describe(manifest, plan, row, keys):
         ]
     out += [details, "", "### Global Constraints", ""]
     out.append(global_constraints(plan))
-    return TASK_REF.sub(lambda m: keys.get(m.group(0), m.group(0)), "\n".join(out))
+    return "\n".join(out)
 
 
 def check(manifest_path):

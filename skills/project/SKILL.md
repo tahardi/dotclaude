@@ -109,9 +109,9 @@ Each section has, in order:
   results, then the implementation that makes it pass (signatures, error messages starting with an "-ing" verb).
 - `**Acceptance criteria:**` the tests that pass, `Needs Taylor:` hand checks, and the pre-PR command exiting 0.
 
-Below the summary, write each card for a less capable model working without this conversation. Points (1, 2, 3, 5, 8) measure the
-user's review effort: more for large diffs, security- or data-sensitive code, languages the user is new to, and
-on-device testing.
+Below the summary, write each card for a less capable model working without this conversation. Points (1, 2, 3,
+5, 8) measure the user's review effort: more for large diffs, security- or data-sensitive code, languages the user is
+new to, and on-device testing.
 
 The first epic is Project Setup. Its cards create the repo (README, .gitignore, PR template, Makefile with
 `.DEFAULT_GOAL := pre-pr`), the dev environment, CI, and the `main` ruleset. A card that runs before the repo

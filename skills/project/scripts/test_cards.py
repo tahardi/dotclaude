@@ -122,6 +122,8 @@ class TestValidate(unittest.TestCase):
              SPEC, "T-S3: plan section has no **Files:**"),
             ("error - section without summary", MANIFEST, PLAN.replace("- **Done when:** It works.\n", "", 1), SPEC,
              "T-S1: plan section has no - **Done when:**"),
+            ("error - details not at a line start", MANIFEST,
+             PLAN.replace("**Details:** Make", "- **Details:** Make", 1), SPEC, "T-S1: plan section has no **Details:** at the start of a line"),
             ("error - orphan plan task", MANIFEST, PLAN + "\n### T-S5: Extra\n\n**Details:** x\n", SPEC,
              "plan task T-S5 is not in the manifest"),
         ]
@@ -171,6 +173,7 @@ class TestDescribe(unittest.TestCase):
         self.assertLess(workflow.index("- **Done when:**"), workflow.index("**Plan:**"))
         self.assertLess(workflow.index("**Workflow:**"), workflow.index("**Details:** Server with key auth"))
         self.assertTrue(manual.startswith("- **Problem:**"), manual)
+        self.assertIn("**Plan:** vault plan, task T-S2.", workflow)
         self.assertIn("**Blocked by:** HALO-11.", workflow)
         self.assertIn("worktree add ~/Documents/code/wts/halo-halo-12-server-skeleton -b halo-12-server-skeleton", workflow)
         self.assertIn("`[HALO-12] Server Skeleton`", workflow)

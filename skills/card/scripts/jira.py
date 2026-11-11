@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 
 from adf import render, text_of
+from md2adf import convert
 
 USAGE = """usage:
   python3 jira.py get KEY                 print card as markdown with status, parent, links
@@ -18,7 +19,8 @@ USAGE = """usage:
   python3 jira.py open-siblings KEY       list cards in KEY's epic that are not Done
   python3 jira.py create PROJECT SUMMARY [--epic KEY] [--labels a,b] [--points N] [--blocked-by K1,K2] [--blocks K3]
                                           [--type Epic] [--color C]
-                                          create a Task, or the --type given; the description is read from stdin;
+                                          create a Task, or the --type given; the description is Markdown read
+                                          from stdin and turned into Jira formatting;
                                           an Epic gets --color or the first color no other open epic uses;
                                           prints the new key
   python3 jira.py test-card PROJECT SUMMARY
@@ -28,7 +30,7 @@ USAGE = """usage:
   python3 jira.py list PROJECT [--label X]
                                           list open cards in PROJECT, optionally only those labeled X
   python3 jira.py update KEY [--description -] [--add-labels a,b] [--remove-labels c,d] [--points N] [--epic KEY]
-                                          update a card; --description - reads the description from stdin
+                                          update a card; --description - reads the Markdown description from stdin
   python3 jira.py link BLOCKER BLOCKED    mark BLOCKER as blocking BLOCKED
   python3 jira.py attach KEY FILE         attach FILE to KEY
   python3 jira.py create-project KEY NAME create a team-managed Scrum project led by the token's user; prints the
@@ -188,7 +190,7 @@ def list_cards(project, label):
 def update(key, opts):
     fields, edits = {}, {}
     if opts.get("--description") == "-":
-        fields["description"] = text_doc(sys.stdin.read())
+        fields["description"] = convert(sys.stdin.read())
     if "--epic" in opts:
         fields["parent"] = {"key": opts["--epic"]}
     if "--points" in opts:
@@ -217,7 +219,7 @@ def create(project, summary, opts):
         "project": {"key": project},
         "summary": summary,
         "issuetype": {"name": opts.get("--type", "Task")},
-        "description": text_doc(sys.stdin.read()),
+        "description": convert(sys.stdin.read()),
         "labels": [x for x in opts.get("--labels", "").split(",") if x],
     }
     if "--epic" in opts:
@@ -235,30 +237,12 @@ def create(project, summary, opts):
     print(new)
 
 
-def markdown_doc(text):
-    content = []
-    for block in re.split(r"\n\s*\n", text.strip()):
-        lines = block.split("\n")
-        heading = re.match(r"(#{1,6}) (.+)", block)
-        if heading and len(lines) == 1:
-            content.append({"type": "heading", "attrs": {"level": len(heading[1])}, "content": [{"type": "text", "text": heading[2]}]})
-        elif all(re.match(r"[-*] ", line) for line in lines):
-            items = [{"type": "listItem", "content": text_doc(line[2:])["content"]} for line in lines]
-            content.append({"type": "bulletList", "content": items})
-        elif all(re.match(r"\d+\. ", line) for line in lines):
-            items = [{"type": "listItem", "content": text_doc(line.split(" ", 1)[1])["content"]} for line in lines]
-            content.append({"type": "orderedList", "content": items})
-        else:
-            content += text_doc(block)["content"]
-    return {"type": "doc", "version": 1, "content": content}
-
-
 def test_card(project, summary):
     fields = {
         "project": {"key": project},
         "summary": summary if summary.startswith("[TEST] ") else f"[TEST] {summary}",
         "issuetype": {"name": "Task"},
-        "description": markdown_doc(sys.stdin.read()),
+        "description": convert(sys.stdin.read()),
         "labels": ["test-card"],
     }
     new = api("POST", "/rest/api/3/issue", {"fields": fields})["key"]

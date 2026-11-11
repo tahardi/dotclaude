@@ -3,7 +3,7 @@ import os
 import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "card", "scripts"))
 from md2adf import convert  # noqa: E402
 
 USAGE = """usage:

@@ -27,7 +27,7 @@ Rewrite every open card in the project labeled `needs-refinement` so the /card s
 
 ## Template
 
-Write plain text with `**bold**` and backticks, sections in this order and separated by blank lines. The card opens
+Write Markdown (`**bold**`, backticks, `-` and `1.` lists, fenced code), which `jira.py` turns into Jira formatting, with sections in this order and separated by blank lines. The card opens
 with a summary for Taylor, who reads it in Jira and Maple; everything after it is for the session that implements
 the card.
 

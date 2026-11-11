@@ -69,7 +69,7 @@ def convert(md):
         m = re.match(r"^(#{1,6})\s+(.*)$", stripped)
         if m:
             flush()
-            level = min(len(m.group(1)) + 1, 6)
+            level = len(m.group(1))
             doc.append({"type": "heading", "attrs": {"level": level}, "content": inline(m.group(2))})
             i += 1
             continue

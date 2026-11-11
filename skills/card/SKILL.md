@@ -34,7 +34,7 @@ If rules 1 and 2 conflict, stop and ask the user.
 
 ## Workflow
 
-1. **Read the card.** Run `jira.py get KEY` and read all of it. If the card is `In Review` and has an open PR (see "Finding a card's PR"), skip to
+1. **Read the card.** Run `jira.py get KEY` and read all of it. If the card is `Done`, tell the user and stop. If the card is `In Review` and has an open PR (see "Finding a card's PR"), skip to
    "Review Round". If the card is not `Done`, its PR is merged, and `gh pr view <number> --json mergedBy --jq .mergedBy.login` is Taylor's login (`gh repo view --json owner --jq .owner.login`), treat it as approved: move the card to Done, remove the worktree and the local and remote branch under the same rules as Review Round step 4, apply the PR's "Card impacts" as in "Applying Card Impacts", move its test cards to `Done` as in "Closing Test Cards", and stop. If someone else merged it, tell the user and stop. If the card is `In Progress` and has an open PR (an earlier run stopped at the security pass), run Review Round steps 1 to 3 to handle new comments, but do not stop at the end of step 3. Then every check in `gh pr checks <number>` must pass; if not, fix CI as in step 12 first. If the PR body still says `Agent review: pending`, run steps 13 and 14 first. Then run "Security Pass", unless step 3 just ran it, and continue from "Finish".
 2. **Check blockers.** If any "Blocked by" card is not `Done` and `force` was not given, stop. Tell the user which blockers are open, and change nothing.
    Otherwise run `jira.py strike-blockers KEY` to strike through the finished blockers in the card's description.

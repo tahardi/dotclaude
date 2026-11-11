@@ -9,7 +9,7 @@ PLAN = """# Plan
 
 ## Global Constraints
 
-No comments.
+No comments. Keep T-S1's layout.
 
 ## Epic: Setup
 
@@ -123,7 +123,8 @@ class TestValidate(unittest.TestCase):
             ("error - section without summary", MANIFEST, PLAN.replace("- **Done when:** It works.\n", "", 1), SPEC,
              "T-S1: plan section has no - **Done when:**"),
             ("error - details not at a line start", MANIFEST,
-             PLAN.replace("**Details:** Make", "- **Details:** Make", 1), SPEC, "T-S1: plan section has no **Details:** at the start of a line"),
+             PLAN.replace("**Details:** Make", "- **Details:** Make", 1), SPEC,
+             "T-S1: plan section has no **Details:** at the start of a line"),
             ("error - orphan plan task", MANIFEST, PLAN + "\n### T-S5: Extra\n\n**Details:** x\n", SPEC,
              "plan task T-S5 is not in the manifest"),
         ]
@@ -178,7 +179,7 @@ class TestDescribe(unittest.TestCase):
         self.assertIn("worktree add ~/Documents/code/wts/halo-halo-12-server-skeleton -b halo-12-server-skeleton", workflow)
         self.assertIn("`[HALO-12] Server Skeleton`", workflow)
         self.assertIn("Uses the repo from HALO-11.", workflow)
-        self.assertIn("### Global Constraints\n\nNo comments.", workflow)
+        self.assertIn("### Global Constraints\n\nNo comments. Keep T-S1's layout.", workflow)
         self.assertNotIn("**Workflow:**", manual)
         self.assertIn("**Blocked by:** none.", manual)
 

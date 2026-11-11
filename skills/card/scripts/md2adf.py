@@ -1,6 +1,7 @@
 import re
 
-INLINE = re.compile(r"(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))")
+URL = r"https?://[^\s<>()]*[^\s<>().,;:!?'\"]"
+INLINE = re.compile(rf"(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|{URL})")
 LIST = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.*)$")
 
 
@@ -21,6 +22,8 @@ def inline(text):
         elif part.startswith("[") and "](" in part:
             label, url = part[1:].split("](", 1)
             out.append({"type": "text", "text": label, "marks": [{"type": "link", "attrs": {"href": url[:-1]}}]})
+        elif re.fullmatch(URL, part):
+            out.append({"type": "text", "text": part, "marks": [{"type": "link", "attrs": {"href": part}}]})
         else:
             out.append({"type": "text", "text": part})
     return out
@@ -29,6 +32,21 @@ def inline(text):
 def para(text):
     nodes = inline(text)
     return {"type": "paragraph", "content": nodes} if nodes else None
+
+
+def fence(lines, i):
+    line = lines[i]
+    lang = line.strip()[3:].strip() or None
+    indent = len(line) - len(line.lstrip())
+    code = []
+    i += 1
+    while i < len(lines) and not lines[i].strip().startswith("```"):
+        code.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
+        i += 1
+    node = {"type": "codeBlock", "content": [{"type": "text", "text": "\n".join(code) or " "}]}
+    if lang:
+        node["attrs"] = {"language": lang}
+    return node, i + 1
 
 
 def convert(md):
@@ -49,17 +67,7 @@ def convert(md):
         stripped = line.strip()
         if stripped.startswith("```"):
             flush()
-            lang = stripped[3:].strip() or None
-            indent = len(line) - len(line.lstrip())
-            code = []
-            i += 1
-            while i < len(lines) and not lines[i].strip().startswith("```"):
-                code.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
-                i += 1
-            i += 1
-            node = {"type": "codeBlock", "content": [{"type": "text", "text": "\n".join(code) or " "}]}
-            if lang:
-                node["attrs"] = {"language": lang}
+            node, i = fence(lines, i)
             doc.append(node)
             continue
         if not stripped:
@@ -69,8 +77,7 @@ def convert(md):
         m = re.match(r"^(#{1,6})\s+(.*)$", stripped)
         if m:
             flush()
-            level = len(m.group(1))
-            doc.append({"type": "heading", "attrs": {"level": level}, "content": inline(m.group(2))})
+            doc.append({"type": "heading", "attrs": {"level": len(m.group(1))}, "content": inline(m.group(2))})
             i += 1
             continue
         if stripped.startswith("|"):
@@ -81,22 +88,10 @@ def convert(md):
                 i += 1
             doc.append({"type": "codeBlock", "content": [{"type": "text", "text": "\n".join(rows)}]})
             continue
-        m = LIST.match(line)
-        if m:
+        if LIST.match(line):
             flush()
-            items = []
-            while i < len(lines):
-                m = LIST.match(lines[i])
-                if m:
-                    depth = 1 if len(m.group(1)) >= 2 else 0
-                    items.append([depth, m.group(2)[0].isdigit(), m.group(3)])
-                    i += 1
-                elif lines[i].strip() and not lines[i].strip().startswith("```") and lines[i].startswith(" ") and items:
-                    items[-1][2] += " " + lines[i].strip()
-                    i += 1
-                else:
-                    break
-            doc.append(build_list(items))
+            node, i = parse_list(lines, i)
+            doc.append(node)
             continue
         buf.append(line)
         i += 1
@@ -104,15 +99,51 @@ def convert(md):
     return {"type": "doc", "version": 1, "content": doc}
 
 
-def build_list(items):
-    root = {"type": "orderedList" if items[0][1] else "bulletList", "content": []}
-    for depth, ordered, text in items:
-        p = para(text) or {"type": "paragraph", "content": []}
-        if depth == 0 or not root["content"]:
-            root["content"].append({"type": "listItem", "content": [p]})
+def parse_list(lines, i):
+    ordered = LIST.match(lines[i]).group(2)[0].isdigit()
+    items = []
+    gap = False
+    while i < len(lines):
+        line = lines[i]
+        m = LIST.match(line)
+        if not line.strip():
+            j = i
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j == len(lines) or not (lines[j].startswith(" ") or LIST.match(lines[j])):
+                break
+            i, gap = j, True
+            continue
+        if m and (m.group(1) or m.group(2)[0].isdigit() == ordered):
+            items.append({"depth": 1 if len(m.group(1)) >= 2 else 0, "ordered": m.group(2)[0].isdigit(),
+                          "text": m.group(3), "blocks": []})
+            i, gap = i + 1, False
+        elif m or not line.startswith(" "):
+            break
+        elif line.strip().startswith("```"):
+            node, i = fence(lines, i)
+            items[-1]["blocks"].append(node)
+        elif gap or (items[-1]["blocks"] and items[-1]["blocks"][-1]["type"] != "paragraph"):
+            items[-1]["blocks"].append(para(line.strip()))
+            i, gap = i + 1, False
+        elif items[-1]["blocks"]:
+            items[-1]["blocks"][-1]["content"] += inline(" " + line.strip())
+            i += 1
+        else:
+            items[-1]["text"] += " " + line.strip()
+            i += 1
+    return build_list(items, ordered), i
+
+
+def build_list(items, ordered):
+    root = {"type": "orderedList" if ordered else "bulletList", "content": []}
+    for entry in items:
+        p = para(entry["text"]) or {"type": "paragraph", "content": []}
+        if entry["depth"] == 0 or not root["content"]:
+            root["content"].append({"type": "listItem", "content": [p, *entry["blocks"]]})
         else:
             parent = root["content"][-1]["content"]
             if parent[-1]["type"] not in ("bulletList", "orderedList"):
-                parent.append({"type": "orderedList" if ordered else "bulletList", "content": []})
-            parent[-1]["content"].append({"type": "listItem", "content": [p]})
+                parent.append({"type": "orderedList" if entry["ordered"] else "bulletList", "content": []})
+            parent[-1]["content"].append({"type": "listItem", "content": [p, *entry["blocks"]]})
     return root

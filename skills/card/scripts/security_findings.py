@@ -5,7 +5,7 @@ import sys
 MARKER = re.compile(r"\A<!-- xena-security-finding severity=(high|medium|low) id=([A-Za-z0-9-]{1,40}) -->")
 ACCEPT = re.compile(r"(?m)^xena-accept ([A-Za-z0-9-]{1,40})$")
 NUMBERED = re.compile(r"\AF(\d+)\Z")
-TOOL_PREFIXES = ("**Claude:**", "**Reviewer note:**")
+TOOL_PREFIXES = ("**Claude:**", "**Reviewer fix:**", "**Reviewer note:**")
 
 
 def accepted_ids(comments: list, login: str) -> set:

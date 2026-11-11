@@ -15,7 +15,7 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 | `statusline.sh` | Two-line status bar for Claude Code: model, folder, branch, context use, and plan limits. Needs jq and git |
 | `install.sh` | `install.sh desktop` links the files above into `~/.claude` and moves anything it replaces to `~/.claude/dotclaude-backup/`; `install.sh vm` copies the VM settings, `CLAUDE.md`, the status line, and the skills into `/etc/claude-code`, where the VM user cannot change them |
 
-`/card` runs a security pass after CI passes and posts findings as PR comments. An open high finding keeps the card out of In Review, and a finding closes only with Taylor's `xena-accept <id>` comment.
+`/card` runs a security pass after CI passes. A finding with a clear fix is fixed in the PR and only reported. A finding whose handling is unclear is posted as a PR comment: an open high one keeps the card out of In Review, and it closes only with Taylor's `xena-accept <id>` comment.
 
 When `/card` finds a PR Taylor merged, it treats the PR as approved and skips review: card to Done, worktree and branch removed, the PR's card impacts applied (which can create new Jira cards), and its test cards moved to Done.
 

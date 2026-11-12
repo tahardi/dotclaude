@@ -6,7 +6,7 @@ claude_dir=${CLAUDE_DIR:-$HOME/.claude}
 managed_dir=${MANAGED_DIR:-/etc/claude-code}
 go_cache_dir=${GO_CACHE_DIR:-$HOME/.cache/claude-go}
 backup_dir=$claude_dir/dotclaude-backup/$(date +%Y%m%d%H%M%S)
-skills=(audit card project refine repo-security-review retro)
+skills=(audit card learn project refine repo-security-review retro)
 
 link() {
 	local src=$1 dst=$2

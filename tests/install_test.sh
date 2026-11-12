@@ -35,6 +35,7 @@ test_desktop_links_files() {
 		"skills/refine:skills/refine" \
 		"skills/retro:skills/retro" \
 		"skills/audit:skills/audit" \
+		"skills/learn:skills/learn" \
 		"skills/repo-security-review:skills/repo-security-review"; do
 		src=$repo/${pair%%:*}
 		dst=$claude_dir/${pair#*:}

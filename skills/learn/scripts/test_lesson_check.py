@@ -87,6 +87,22 @@ def bool_answer(data):
     data["questions"][0]["answer"] = True
 
 
+def one_number_lines(data):
+    data["steps"][0]["lines"] = [3]
+
+
+def text_lines(data):
+    data["steps"][0]["lines"] = ["1", "2"]
+
+
+def blank_why(data):
+    data["questions"][0]["why"] = " "
+
+
+def steps_not_list(data):
+    data["steps"] = {}
+
+
 class TestLessonCheck(unittest.TestCase):
     def test_check(self):
         cases = [
@@ -128,6 +144,14 @@ class TestLessonCheck(unittest.TestCase):
              ["checking lesson: quiz question 1 has 6 choices, want 2 to 5"]),
             ("error - answer is a boolean", with_block("maple-quiz", bool_answer),
              ["checking lesson: quiz question 1: answer True is not a choice index (3 choices)"]),
+            ("error - lines has one number", with_block("maple-trace", one_number_lines),
+             ["checking lesson: trace step 1: lines is not [first, last]"]),
+            ("error - lines are text", with_block("maple-trace", text_lines),
+             ["checking lesson: trace step 1: lines is not [first, last]"]),
+            ("error - blank why", with_block("maple-quiz", blank_why),
+             ["checking lesson: quiz question 1: why is missing"]),
+            ("error - steps is not a list", with_block("maple-trace", steps_not_list),
+             ["checking lesson: trace: steps is not a list"]),
             ("error - block is a list", ok().replace(block(ok(), "maple-quiz"), "[]"),
              ["checking lesson: quiz is not an object"]),
         ]

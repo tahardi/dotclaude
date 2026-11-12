@@ -1,0 +1,34 @@
+version: 1
+assets:
+  - id: jira-token
+    what: Jira API token in the shared env file
+    loss: Someone could read and change every card
+components:
+  - id: renderer
+    what: The app window that draws the board
+  - id: main-process
+    what: The Node process that runs git, gh, and Jira calls
+  - id: hook-server
+    what: Local socket that takes hook events from Claude
+  - id: ci
+    what: GitHub Actions jobs that run on every PR
+attackers:
+  - id: pr-author
+    who: Anyone who can open a PR or comment on GitHub
+    reaches: [ci]
+boundaries:
+  - id: renderer-to-main
+    between: [renderer, main-process]
+    crosses: IPC calls from the window
+    checks: Schema check on every argument
+users:
+  - id: taylor
+    who: Owner
+    can: Everything
+    access: Desktop login, GitHub owner, Jira admin
+build:
+  built: make pre-pr locally, GitHub Actions on PRs
+  deployed: Installed from a local build
+  monitored: Event log in the config dir
+accepted: []
+overrides: []

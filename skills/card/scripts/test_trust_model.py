@@ -241,6 +241,11 @@ class TestProblems(unittest.TestCase):
                 model(lambda d: d.update(accepted=[{"identity": {**CODE, "class": "Command Injection"}}])),
                 checking("accepted entry 1 has a bad identity"),
             ),
+            (
+                "repeated heading",
+                replace(MD, "## Severity Overrides\n", "## Severity Overrides\n\n## Assets\n"),
+                checking('trust-model.md has "## Assets" more than once'),
+            ),
             ("missing enabled", security(lambda d: d.pop("enabled")), checking("enabled must be true or false")),
         ]
 

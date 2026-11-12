@@ -103,6 +103,9 @@ def markdown_problems(text: str) -> list:
 
         index = lines.index(heading)
 
+        if lines.count(heading) > 1:
+            found.append(f'trust-model.md has "{heading}" more than once')
+
         if index < last:
             found.append(f'trust-model.md has "{heading}" out of order')
 

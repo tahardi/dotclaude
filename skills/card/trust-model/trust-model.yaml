@@ -30,5 +30,5 @@ build:
   built: make pre-pr locally, GitHub Actions on PRs
   deployed: Installed from a local build
   monitored: Event log in the config dir
-accepted: []
-overrides: []
+accepted:
+overrides:

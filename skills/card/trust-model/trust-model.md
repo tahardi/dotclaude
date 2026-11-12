@@ -12,9 +12,12 @@ Maple is a desktop app that runs Jira cards with Claude. Taylor is its only user
 
 ## Trust Boundaries
 
-The app has four parts: the window (`renderer`), the Node process behind it (`main-process`), the local socket for
-Claude hook events (`hook-server`), and the GitHub Actions jobs (`ci`). The socket is internal-only.
+The app has four parts. Only `ci` is reachable from outside; the rest are internal-only.
 
+- `renderer`: the app window that draws the board.
+- `main-process`: the Node process that runs git, gh, and Jira calls.
+- `hook-server`: the local socket that takes hook events from Claude.
+- `ci`: the GitHub Actions jobs that run on every PR.
 - `renderer-to-main`: IPC calls from the window to the Node process. Every argument gets a schema check.
 
 ## Users and Access

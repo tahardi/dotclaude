@@ -18,6 +18,7 @@ SECURITY = ".maple/security.yaml"
 CODE = {"kind": "code", "class": "command-injection", "file": "api/run.go", "hash": "0123456789abcdef"}
 DEPENDENCY = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
 USAGE = "usage: trust_model.py check DIR\n"
+MISSING = f"checking trust model: {MODEL} is missing\nchecking trust model: {SECURITY} is missing\n"
 
 
 def copy_templates(repo):
@@ -66,8 +67,25 @@ def drop_build(key):
     return lambda data: data["build"].pop(key)
 
 
+def write(rel, text):
+    return lambda repo: (repo / rel).write_text(text)
+
+
 def checking(text):
     return [f"checking trust model: {text}"]
+
+
+class Reading:
+    def __init__(self, rel):
+        self.prefix = f"reading trust model: {rel}: "
+
+    def __eq__(self, other):
+        return isinstance(other, str) and other.startswith(self.prefix) and len(other) > len(self.prefix) and (
+            "\n" not in other
+        )
+
+    def __repr__(self):
+        return f"{self.prefix}<reason>"
 
 
 class TestProblems(unittest.TestCase):
@@ -88,7 +106,9 @@ class TestProblems(unittest.TestCase):
                 "empty components",
                 model(empty("components")),
                 checking("components needs at least one entry")
-                + checking("attacker pr-author reaches unknown component ci"),
+                + checking("attacker pr-author reaches unknown component ci")
+                + checking("boundary renderer-to-main is between unknown component renderer")
+                + checking("boundary renderer-to-main is between unknown component main-process"),
             ),
             ("empty attackers", model(empty("attackers")), checking("attackers needs at least one entry")),
             ("empty boundaries", model(empty("boundaries")), checking("boundaries needs at least one entry")),
@@ -158,6 +178,70 @@ class TestProblems(unittest.TestCase):
             ("model version 2", replace(MODEL, "version: 1", "version: 2"), checking("version must be 1")),
             ("security version 2", replace(SECURITY, "version: 1", "version: 2"), checking("version must be 1")),
             ("unknown security key", security(lambda d: d.update(tools=["npm-audit"])), []),
+            ("bad model yaml", write(MODEL, "assets: [\n"), [Reading(MODEL)]),
+            ("bad security yaml", write(SECURITY, "enabled: : true\n"), [Reading(SECURITY)]),
+            ("model not a mapping", write(MODEL, "- one\n"), [Reading(MODEL)]),
+            ("security not a mapping", write(SECURITY, "true\n"), [Reading(SECURITY)]),
+            (
+                "heading out of order",
+                replace(
+                    MD,
+                    "## Accepted Risks\n\nNone yet.\n\n## Severity Overrides",
+                    "## Severity Overrides\n\nNone yet.\n\n## Accepted Risks",
+                ),
+                checking('trust-model.md has "## Severity Overrides" out of order'),
+            ),
+            (
+                "entry not a mapping",
+                model(lambda d: d.update(assets=["foo"])),
+                checking("assets entry 1 is not a mapping"),
+            ),
+            (
+                "reaches not a list",
+                model(lambda d: d["attackers"][0].update(reaches="ci")),
+                checking("attacker pr-author reaches must be a list"),
+            ),
+            (
+                "duplicate id",
+                model(lambda d: d["components"].append({"id": "ci", "what": "again"})),
+                checking("components has id ci more than once"),
+            ),
+            (
+                "boundary between unknown component",
+                model(lambda d: d["boundaries"][0].update(between=["renderer", "nope"])),
+                checking("boundary renderer-to-main is between unknown component nope"),
+            ),
+            (
+                "override severity",
+                model(lambda d: d.update(overrides=[{"identity": CODE, "severity": "critical"}])),
+                checking("overrides entry 1 needs severity high, medium, or low"),
+            ),
+            (
+                "override without severity",
+                model(lambda d: d.update(overrides=[{"identity": CODE}])),
+                checking("overrides entry 1 needs severity high, medium, or low"),
+            ),
+            (
+                "accepted entry is a string",
+                model(lambda d: d.update(accepted=["MPL-340 F3"])),
+                checking("accepted entry 1 has a bad identity"),
+            ),
+            (
+                "accepted entry without identity",
+                model(lambda d: d.update(accepted=[{"title": "t"}])),
+                checking("accepted entry 1 has a bad identity"),
+            ),
+            (
+                "empty dependency package",
+                model(lambda d: d.update(accepted=[{"identity": {**DEPENDENCY, "package": ""}}])),
+                checking("accepted entry 1 has a bad identity"),
+            ),
+            (
+                "bad class",
+                model(lambda d: d.update(accepted=[{"identity": {**CODE, "class": "Command Injection"}}])),
+                checking("accepted entry 1 has a bad identity"),
+            ),
+            ("missing enabled", security(lambda d: d.pop("enabled")), checking("enabled must be true or false")),
         ]
 
         for name, change, expected in cases:
@@ -173,39 +257,17 @@ class TestProblems(unittest.TestCase):
                 # then
                 self.assertEqual(result, expected)
 
-    def test_problems_bad_yaml(self):
-        cases = [
-            ("model", MODEL, "assets: [\n"),
-            ("security", SECURITY, "enabled: : true\n"),
-            ("model not a mapping", MODEL, "- one\n"),
-        ]
-
-        for name, rel, text in cases:
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
-                # given
-                repo = Path(directory)
-                copy_templates(repo)
-                (repo / rel).write_text(text)
-
-                # when
-                result = problems(repo)
-
-                # then
-                self.assertEqual(len(result), 1)
-                self.assertTrue(result[0].startswith(f"reading trust model: {rel}: "), result[0])
-                self.assertNotIn("\n", result[0])
-
 
 class TestMain(unittest.TestCase):
     def test_main(self):
         cases = [
-            ("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, ""),
-            ("no problems", ["check", "DIR"], [], 0, ""),
-            ("no arguments", [], [], 2, USAGE),
-            ("wrong command", ["fix", "DIR"], [], 2, USAGE),
+            ("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, MISSING, ""),
+            ("no problems", ["check", "DIR"], [], 0, "", ""),
+            ("no arguments", [], [], 2, "", USAGE),
+            ("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
         ]
 
-        for name, args, changes, code, err in cases:
+        for name, args, changes, code, out, err in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 # given
                 repo = Path(directory)
@@ -226,13 +288,7 @@ class TestMain(unittest.TestCase):
 
                 # then
                 self.assertEqual(raised.exception.code, code)
-                if name == "problems":
-                    self.assertEqual(
-                        stdout.getvalue(),
-                        f"checking trust model: {MODEL} is missing\nchecking trust model: {SECURITY} is missing\n",
-                    )
-                else:
-                    self.assertEqual(stdout.getvalue(), "")
+                self.assertEqual(stdout.getvalue(), out)
                 self.assertEqual(stderr.getvalue(), err)
 
 

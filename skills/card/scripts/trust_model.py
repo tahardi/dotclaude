@@ -25,6 +25,7 @@ ENTRY_FIELDS = {
     "users": ["id", "who", "can", "access"],
 }
 BUILD_FIELDS = ["built", "deployed", "monitored"]
+SEVERITIES = ("high", "medium", "low")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
 HASH = re.compile(r"\A[0-9a-f]{16}\Z")
 USAGE = "usage: trust_model.py check DIR"
@@ -91,8 +92,23 @@ def entries(data: dict, key: str) -> list:
 
 
 def markdown_problems(text: str) -> list:
-    lines = set(text.splitlines())
-    return [f'trust-model.md has no "{heading}" heading' for heading in HEADINGS if heading not in lines]
+    lines = text.splitlines()
+    found = []
+    last = -1
+
+    for heading in HEADINGS:
+        if heading not in lines:
+            found.append(f'trust-model.md has no "{heading}" heading')
+            continue
+
+        index = lines.index(heading)
+
+        if index < last:
+            found.append(f'trust-model.md has "{heading}" out of order')
+
+        last = max(last, index)
+
+    return found
 
 
 def identity_problems(data: dict, key: str) -> list:
@@ -123,6 +139,10 @@ def model_problems(model: dict) -> list:
 
             found.extend(f"{key} entry {number} has no {field}" for field in fields if entry.get(field) in (None, ""))
 
+        ids = [entry.get("id") for entry in entries(model, key) if isinstance(entry, dict) and entry.get("id")]
+        repeated = sorted({entry_id for entry_id in ids if ids.count(entry_id) > 1})
+        found.extend(f"{key} has id {entry_id} more than once" for entry_id in repeated)
+
     components = {entry.get("id") for entry in entries(model, "components") if isinstance(entry, dict)}
 
     for attacker in entries(model, "attackers"):
@@ -139,12 +159,26 @@ def model_problems(model: dict) -> list:
             if component not in components:
                 found.append(f"attacker {attacker.get('id')} reaches unknown component {component}")
 
+    for boundary in entries(model, "boundaries"):
+        if not isinstance(boundary, dict):
+            continue
+
+        between = boundary.get("between")
+
+        for component in between if isinstance(between, list) else []:
+            if component not in components:
+                found.append(f"boundary {boundary.get('id')} is between unknown component {component}")
+
     build = model.get("build")
     build = build if isinstance(build, dict) else {}
     found.extend(f"build.{field} is missing" for field in BUILD_FIELDS if build.get(field) in (None, ""))
 
     for key in ("accepted", "overrides"):
         found.extend(identity_problems(model, key))
+
+    for number, entry in enumerate(entries(model, "overrides"), start=1):
+        if not isinstance(entry, dict) or entry.get("severity") not in SEVERITIES:
+            found.append(f"overrides entry {number} needs severity high, medium, or low")
 
     return found
 

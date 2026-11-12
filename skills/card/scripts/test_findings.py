@@ -164,6 +164,27 @@ class TestWrite(unittest.TestCase):
                 {"round": 2, "ids": ["F4"], "dropped": 0},
             ),
             (
+                "merged repeats keep the higher severity",
+                None,
+                [item(severity="medium"), item(sources=["agent-review"])],
+                file(1, [stored("F1", sources=["security-pass", "agent-review"])]),
+                {"round": 1, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "null severity becomes high and repeated chips collapse",
+                None,
+                [item(severity=None, chips=["runs-code", "runs-code"])],
+                file(1, [stored("F1")]),
+                {"round": 1, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "empty input clears undecided findings and keeps decided ones",
+                old_file([stored("F1", decision=DECIDED), other_stored("F2")]),
+                [],
+                file(2, [stored("F1", decision=DECIDED)]),
+                {"round": 2, "ids": [], "dropped": 0},
+            ),
+            (
                 "maple fields are kept on an update",
                 old_file([stored("F1", severityOverride="low", lesson=LESSON)], resume=RESUME),
                 [item(severity="medium", title="New")],
@@ -240,6 +261,123 @@ class TestMain(unittest.TestCase):
                 "reading findings input: item 1: missing how\n",
                 None,
             ),
+            (
+                "over 3 chips",
+                argv,
+                json.dumps([item(chips=["runs-code", "leaks-data", "costs-money", "supply-chain"])]),
+                None,
+                1,
+                "reading findings input: item 1: chips is not a list of up to 3\n",
+                None,
+            ),
+            (
+                "unknown source",
+                argv,
+                json.dumps([item(sources=["someone"])]),
+                None,
+                1,
+                "reading findings input: item 1: unknown source someone\n",
+                None,
+            ),
+            (
+                "empty sources",
+                argv,
+                json.dumps([item(sources=[])]),
+                None,
+                1,
+                "reading findings input: item 1: sources is not a non-empty list\n",
+                None,
+            ),
+            (
+                "line 0",
+                argv,
+                json.dumps([item(line=0)]),
+                None,
+                1,
+                "reading findings input: item 1: line is not a positive number or null\n",
+                None,
+            ),
+            (
+                "line true",
+                argv,
+                json.dumps([item(line=True)]),
+                None,
+                1,
+                "reading findings input: item 1: line is not a positive number or null\n",
+                None,
+            ),
+            (
+                "line text",
+                argv,
+                json.dumps([item(line="3")]),
+                None,
+                1,
+                "reading findings input: item 1: line is not a positive number or null\n",
+                None,
+            ),
+            (
+                "unknown identity kind",
+                argv,
+                json.dumps([item(identity={"kind": "other"})]),
+                None,
+                1,
+                "reading findings input: item 1: identity kind is not code or dependency\n",
+                None,
+            ),
+            (
+                "class not kebab-case",
+                argv,
+                json.dumps([item(identity={**item()["identity"], "class": "Command Injection"})]),
+                None,
+                1,
+                "reading findings input: item 1: identity class is not a kebab-case slug\n",
+                None,
+            ),
+            (
+                "identity without code",
+                argv,
+                json.dumps([item(identity={"kind": "code", "class": "x", "file": "a.ts"})]),
+                None,
+                1,
+                "reading findings input: item 1: identity code is not a non-empty string\n",
+                None,
+            ),
+            (
+                "title over 120 characters",
+                argv,
+                json.dumps([item(title="x" * 121)]),
+                None,
+                1,
+                "reading findings input: item 1: title is over 120 characters\n",
+                None,
+            ),
+            (
+                "existing file not json",
+                argv,
+                good,
+                "{",
+                1,
+                f"reading findings: {KEY}.json: not valid JSON\n",
+                None,
+            ),
+            (
+                "existing file without findings",
+                argv,
+                good,
+                json.dumps({"version": 1}),
+                1,
+                f"reading findings: {KEY}.json: not a findings file\n",
+                None,
+            ),
+            (
+                "existing finding without an id",
+                argv,
+                good,
+                json.dumps(file(1, [{"decision": None}])),
+                1,
+                f"reading findings: {KEY}.json: not a findings file\n",
+                None,
+            ),
             ("not json", argv, "{", None, 1, "reading findings input: not valid JSON\n", None),
             ("not an array", argv, "{}", None, 1, "reading findings input: expected a JSON array\n", None),
             (
@@ -253,7 +391,17 @@ class TestMain(unittest.TestCase):
             ),
             ("no arguments", ["findings.py"], good, None, 2, USAGE, None),
             ("no head", ["findings.py", "write", KEY], good, None, 2, USAGE, None),
+            (
+                "rename fails",
+                argv,
+                good,
+                None,
+                1,
+                f"writing findings: {KEY}.json: Permission denied\n",
+                None,
+            ),
         ]
+        rename_errors = {"rename fails": OSError(13, "Permission denied")}
 
         for name, args, stdin_text, existing, want_code, want_stderr, want_output in cases:
             with self.subTest(name):
@@ -269,10 +417,12 @@ class TestMain(unittest.TestCase):
                         with open(path, "w") as handle:
                             handle.write(existing)
 
+                    rename = mock.patch.object(findings.os, "replace", side_effect=rename_errors.get(name, os.replace))
+
                     # when
                     with mock.patch.object(sys, "argv", args), mock.patch.object(
                         sys, "stdin", io.StringIO(stdin_text)
-                    ):
+                    ), rename:
                         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                             try:
                                 findings.main()
@@ -284,6 +434,7 @@ class TestMain(unittest.TestCase):
                     self.assertEqual(stderr.getvalue(), want_stderr)
                     self.assertEqual(json.loads(stdout.getvalue()) if stdout.getvalue() else None, want_output)
                     self.assertEqual(os.path.exists(path), want_code == 0 or existing is not None)
+                    self.assertEqual([entry for entry in os.listdir(folder) if entry.endswith(".tmp")], [])
 
 
 class TestFindingsPath(unittest.TestCase):

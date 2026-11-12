@@ -103,7 +103,9 @@ part, and merging the PR turns security on for the repo.
    Makefile, container and infra files, the project's spec notes in the vault (with the obsidian-notes skill), and
    past security findings on merged PRs: `gh pr list --state merged --limit 50`, then the comments on each posted by
    Taylor's login or this session's own (`gh api user --jq .login`) whose first line is the finding marker
-   `<!-- xena-security-finding` or `**Claude:** Security pass fixes:`.
+   `<!-- xena-security-finding` or `**Claude:** Security pass fixes:`. For each of those PRs whose title starts with a
+   card key, also read that card's findings file, `<KEY>.json` in `$MAPLE_FINDINGS_DIR` (default
+   `~/.config/maple/findings`), if it exists.
 2. Take the six topics in this order, one per turn:
    1. Assets: what the project protects, and what losing each one means.
    2. Who might attack, and which components each attacker reaches.
@@ -250,12 +252,13 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
    pass that no longer apply are removed. Then run
    `python3 ~/.claude/skills/card/scripts/findings.py write KEY --head "$(git -C <worktree> rev-parse HEAD)" < <file>`.
    It drops `low` findings, merges repeats, keeps Taylor's decisions, and prints `{"round", "ids", "dropped"}`, where
-   `ids` are the findings that need Taylor. If it exits 1, fix the data it names and run it again.
+   `ids` are the findings that need Taylor. If it exits 1 with `reading findings input:`, fix the data it names and run
+   it again. On any other failure, tell the user what it printed and carry on: the pass never blocks.
 7. Run `gh pr edit` to add a "Tests" bullet for each test these fixes added, and to update the deviations and the card
    impacts, as in Agent Review step 10. Leave that step's `Agent review:` line as Agent Review set it; these fixes are
    not Agent Review findings.
 8. List what you fixed (or "none") and "N findings need you", with N the number of `ids`, in the card comment, and
-   report both at "Finish".
+   report both at "Finish". Write "1 finding needs you" when N is 1, as Maple does.
 
 ## Review Round
 

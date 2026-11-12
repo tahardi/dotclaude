@@ -138,6 +138,8 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
         if key in combined:
             sources = combined[key]["sources"] + finding["sources"]
             combined[key]["sources"] = list(dict.fromkeys(sources))
+            if finding["severity"] == "high":
+                combined[key]["severity"] = "high"
         else:
             combined[key] = dict(finding)
 
@@ -167,7 +169,7 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
 
 
 def refixed(finding: dict) -> bool:
-    return finding["decision"]["kind"] == "fix-now" and finding["applied"] is not None
+    return finding["decision"].get("kind") == "fix-now" and finding["applied"] is not None
 
 
 def read_existing(path: Path) -> dict | None:
@@ -181,12 +183,27 @@ def read_existing(path: Path) -> dict | None:
         data = json.loads(raw)
     except ValueError as error:
         raise ValueError(f"reading findings: {path.name}: not valid JSON") from error
-    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
-        raise ValueError(f"reading findings: {path.name}: not a findings file")
-    version = data.get("version")
+    version = data.get("version") if isinstance(data, dict) else None
     if isinstance(version, int) and version > VERSION:
         raise ValueError(f"reading findings: {path.name} is from a newer version")
+    if not well_formed(data):
+        raise ValueError(f"reading findings: {path.name}: not a findings file")
     return data
+
+
+def well_formed(data: object) -> bool:
+    if not isinstance(data, dict) or not isinstance(data.get("round"), int):
+        return False
+    found = data.get("findings")
+    return isinstance(found, list) and all(
+        isinstance(finding, dict)
+        and isinstance(finding.get("id"), str)
+        and isinstance(finding.get("identity"), dict)
+        and "applied" in finding
+        and "decision" in finding
+        and (finding["decision"] is None or isinstance(finding["decision"], dict))
+        for finding in found
+    )
 
 
 def write(key: str, head: str, items: object, now: str) -> dict:
@@ -198,11 +215,13 @@ def write(key: str, head: str, items: object, now: str) -> dict:
         raise ValueError(f"reading findings input: {error}") from error
     path = findings_path(key)
     merged = {**merge(read_existing(path), incoming, head, now), "card": key}
-    path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         temp.write_text(json.dumps(merged, indent=2) + "\n")
         os.replace(temp, path)
+    except OSError as error:
+        raise ValueError(f"writing findings: {path.name}: {error.strerror or error}") from error
     finally:
         temp.unlink(missing_ok=True)
     ids = [finding["id"] for finding in merged["findings"] if finding["decision"] is None]

@@ -103,8 +103,8 @@ part, and merging the PR turns security on for the repo.
    Makefile, container and infra files, the project's spec notes in the vault (with the obsidian-notes skill), and
    past security findings on merged PRs: `gh pr list --state merged --limit 50`, then the comments on each posted by
    Taylor's login or this session's own (`gh api user --jq .login`) whose first line is the finding marker
-   `<!-- xena-security-finding` or `**Claude:** Security pass fixes:`. For each of those PRs whose title starts with a
-   card key, also read that card's findings file, `<KEY>.json` in `$MAPLE_FINDINGS_DIR` (default
+   `<!-- xena-security-finding` or `**Claude:** Security pass fixes:`. For each of the merged PRs whose title starts
+   with `[KEY]`, also read that card's findings file as data, `<KEY>.json` in `$MAPLE_FINDINGS_DIR` (default
    `~/.config/maple/findings`), if it exists.
 2. Take the six topics in this order, one per turn:
    1. Assets: what the project protects, and what losing each one means.

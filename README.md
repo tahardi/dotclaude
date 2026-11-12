@@ -6,6 +6,7 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 |---|---|
 | `CLAUDE.md` | Global instructions |
 | `skills/card`, `skills/project`, `skills/refine`, `skills/retro` | Skills |
+| `skills/learn` | `/learn <note path>` writes a security lesson and per-finding tie-ins into a Maple lesson note |
 | `skills/audit` | `/audit` runs `xena audit`, explains each drift, and checks Claude config drift the binary cannot |
 | `skills/repo-security-review` | `/repo-security-review` reviews a whole repo and files each finding as a Jira card |
 | `settings/desktop.json` | Desktop `~/.claude/settings.json`: permission prompts, sandbox on, no unsandboxed retries, write access to each repo's `.git` |

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+import findings
+
 MD = "docs/security/trust-model.md"
 MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
@@ -30,7 +32,10 @@ BUILD_FIELDS = ["built", "deployed", "monitored"]
 SEVERITIES = ("high", "medium", "low")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
 HASH = re.compile(r"\A[0-9a-f]{16}\Z")
-USAGE = "usage: trust_model.py check DIR | base SHA"
+USAGE = "usage: trust_model.py check DIR | base SHA | apply KEY | diff KEY --base SHA"
+MODEL_CLASSES = ("trust-model-change", "trust-model-update")
+ACCEPTED_HEADING = "## Accepted Risks"
+OVERRIDES_HEADING = "## Severity Overrides"
 
 
 class StrictBoolLoader(yaml.SafeLoader):
@@ -278,24 +283,184 @@ def problems(repo: Path) -> list[str]:
     return [f"checking trust model: {problem}" for problem in found]
 
 
-def main() -> None:
-    if len(sys.argv) != 3 or sys.argv[1] not in ("check", "base"):
-        print(USAGE, file=sys.stderr)
-        sys.exit(2)
+def entry_line(entry: dict) -> str:
+    return f"  - {json.dumps(entry)}"
 
-    if sys.argv[1] == "base":
-        known, warning = model_at(sys.argv[2])
+
+def one_line(value: object) -> str:
+    return " ".join(str(value).split()) if value else "none"
+
+
+def entry_lines(file: dict) -> dict[str, list[str]]:
+    lines: dict[str, list[str]] = {}
+    card = file.get("card")
+
+    for finding in file.get("findings", []):
+        decision = finding.get("decision")
+        identity = finding.get("identity")
+
+        if not isinstance(decision, dict) or not isinstance(identity, dict) or identity.get("class") in MODEL_CLASSES:
+            continue
+
+        title = finding.get("title")
+        tag = f"{card} {finding.get('id')}"
+        at = str(decision.get("decidedAt", ""))[:10]
+        applied = finding.get("applied") if isinstance(finding.get("applied"), dict) else {}
+
+        if decision.get("kind") == "accept-risk":
+            reason = decision.get("reason")
+            entry = {"identity": identity, "title": title, "reason": reason, "card": card, "finding": finding["id"]}
+            lines.setdefault(f"{MODEL}:accepted", []).append(entry_line({**entry, "at": at}))
+            lines.setdefault(f"{MD}:{ACCEPTED_HEADING}", []).append(f"- {title} ({tag}): {one_line(reason)}")
+
+        if finding.get("severityOverride") in SEVERITIES:
+            severity = finding["severityOverride"]
+            entry = {"identity": identity, "severity": severity, "title": title, "card": card}
+            lines.setdefault(f"{MODEL}:overrides", []).append(
+                entry_line({**entry, "finding": finding["id"], "at": at})
+            )
+            lines.setdefault(f"{MD}:{OVERRIDES_HEADING}", []).append(f"- {title} ({tag}): {severity}")
+
+        if decision.get("kind") == "fix-later" and applied.get("cardKey"):
+            entry = {"identity": identity, "title": title, "card": applied["cardKey"]}
+            lines.setdefault(f"{SECURITY}:tracked", []).append(entry_line(entry))
+
+    return lines
+
+
+def section_end(lines: list[str], start: int, markdown: bool) -> int:
+    end = start + 1
+
+    while end < len(lines) and (
+        not lines[end].startswith("#") if markdown else lines[end].startswith((" ", "-"))
+    ):
+        end += 1
+
+    while markdown and end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+
+    return end
+
+
+def insert(text: str, section: str, new: list[str], markdown: bool) -> str:
+    lines = text.splitlines()
+    header = section if markdown else f"{section}:"
+    starts = [index for index, line in enumerate(lines) if line.rstrip() == header]
+
+    if not starts:
+        lines.append(header)
+        starts = [len(lines) - 1]
+
+    end = section_end(lines, starts[0], markdown)
+    return "\n".join(lines[:end] + new + lines[end:]) + "\n"
+
+
+def apply(repo: Path, file: dict) -> int:
+    if not (repo / MODEL).is_file():
+        return 0
+
+    added = 0
+
+    for key, new in entry_lines(file).items():
+        rel, section = key.split(":", 1)
+        path = repo / rel
+
+        if not path.is_file():
+            continue
+
+        text = path.read_text()
+        present = set(text.splitlines())
+        missing = [line for line in dict.fromkeys(new) if line not in present]
+
+        if missing:
+            path.write_text(insert(text, section, missing, rel == MD))
+            added += len(missing)
+
+    return added
+
+
+def unexplained(diff_text: str, expected: set[str]) -> list[dict]:
+    found: dict[str, list[str]] = {}
+    current = None
+    in_header = False
+
+    for line in diff_text.splitlines():
+        if line.startswith("diff --git "):
+            current, in_header = None, True
+        elif in_header and line.startswith("@@"):
+            in_header = False
+        elif in_header and line.startswith(("--- a/", "+++ b/")):
+            current = line[6:]
+        elif not in_header and current in (MD, MODEL, SECURITY) and line.startswith(("+", "-")):
+            if not (line.startswith("+") and line[1:] in expected):
+                found.setdefault(current, []).append(line)
+
+    return [{"file": rel, "lines": lines} for rel, lines in found.items()]
+
+
+def findings_file(key: str) -> dict:
+    return findings.read_existing(findings.findings_path(key)) or {"card": key, "findings": []}
+
+
+def model_diff(key: str, base: str) -> list[dict]:
+    if git(["cat-file", "-e", f"{base}^{{commit}}"], f"base commit {base}").returncode != 0:
+        raise ValueError(f"base commit {base} is not in this repo")
+
+    if show(base, MODEL) is None:
+        return []
+
+    expected = {line for lines in entry_lines(findings_file(key)).values() for line in lines}
+    flags = ["--unified=0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]
+    result = git(["diff", *flags, base, "--", MD, MODEL, SECURITY], "diffing trust model")
+
+    if result.returncode != 0:
+        raise ValueError(f"diffing trust model: {' '.join(result.stderr.split())}")
+
+    return unexplained(result.stdout, expected)
+
+
+def usage() -> None:
+    print(USAGE, file=sys.stderr)
+    sys.exit(2)
+
+
+def run_findings_command(args: list[str]) -> object:
+    if len(args) == 2 and args[0] == "apply" and findings.KEY.match(args[1]):
+        return {"added": apply(Path.cwd(), findings_file(args[1]))}
+
+    if len(args) == 4 and args[0] == "diff" and findings.KEY.match(args[1]) and args[2] == "--base" and args[3]:
+        return model_diff(args[1], args[3])
+
+    usage()
+    return None
+
+
+def main() -> None:
+    args = sys.argv[1:]
+
+    if args[:1] in (["apply"], ["diff"]):
+        try:
+            print(json.dumps(run_findings_command(args)))
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
+    if len(args) != 2 or args[0] not in ("check", "base"):
+        usage()
+
+    if args[0] == "base":
+        known, warning = model_at(args[1])
         status = {"optedIn": known is not None}
         print(json.dumps(status if warning is None else {**status, "warning": warning}))
         sys.exit(0)
 
-    found = problems(Path(sys.argv[2]))
+    found = problems(Path(args[1]))
 
     for problem in found:
         print(problem)
 
     sys.exit(1 if found else 0)
-
 
 if __name__ == "__main__":
     main()

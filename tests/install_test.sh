@@ -106,7 +106,7 @@ test_vm_installs_managed_files() {
 		"CLAUDE.md:CLAUDE.md" \
 		"skills/card/SKILL.md:.claude/skills/card/SKILL.md" \
 		"skills/card/scripts/jira.py:.claude/skills/card/scripts/jira.py" \
-		"skills/card/scripts/security_findings.py:.claude/skills/card/scripts/security_findings.py" \
+		"skills/card/scripts/findings.py:.claude/skills/card/scripts/findings.py" \
 		"skills/audit/SKILL.md:.claude/skills/audit/SKILL.md" \
 		"skills/repo-security-review/SKILL.md:.claude/skills/repo-security-review/SKILL.md" \
 		"skills/retro/SKILL.md:.claude/skills/retro/SKILL.md"; do

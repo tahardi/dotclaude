@@ -1,4 +1,6 @@
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,7 +30,7 @@ BUILD_FIELDS = ["built", "deployed", "monitored"]
 SEVERITIES = ("high", "medium", "low")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
 HASH = re.compile(r"\A[0-9a-f]{16}\Z")
-USAGE = "usage: trust_model.py check DIR"
+USAGE = "usage: trust_model.py check DIR | base SHA"
 
 
 class StrictBoolLoader(yaml.SafeLoader):
@@ -61,6 +63,57 @@ def read_model(text: str) -> dict:
 
 def read_security(text: str) -> dict:
     return load_mapping(text)
+
+
+def git(args: list[str], what: str) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(["git", *args], capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f"{what}: git {args[0]} timed out") from error
+    except OSError as error:
+        raise ValueError(f"{what}: running git: {error.strerror or error}") from error
+
+
+def show(base: str, rel: str) -> str | None:
+    result = git(["show", f"{base}:{rel}"], rel)
+    return result.stdout if result.returncode == 0 else None
+
+
+def at_base(base: str) -> tuple[dict | None, dict | None]:
+    if git(["cat-file", "-e", f"{base}^{{commit}}"], f"base commit {base}").returncode != 0:
+        raise ValueError(f"base commit {base} is not in this repo")
+
+    found = []
+
+    for rel, read in ((MODEL, read_model), (SECURITY, read_security)):
+        text = show(base, rel)
+
+        try:
+            found.append(None if text is None else read(text))
+        except (yaml.YAMLError, ValueError) as error:
+            raise ValueError(f"{rel}: {' '.join(str(error).split())}") from error
+
+    return found[0], found[1]
+
+
+def opted_in(model: dict | None, security: dict | None) -> bool:
+    return model is not None and security is not None and security.get("enabled") is True
+
+
+def model_at(base: str) -> tuple[tuple[dict, dict] | None, str | None]:
+    try:
+        model, security = at_base(base)
+    except ValueError as error:
+        return None, f"reading trust model: {error}; findings unfiltered"
+
+    if model is None or security is None or not opted_in(model, security):
+        return None, None
+
+    for rel, found in ((MODEL, model_problems(model)), (SECURITY, security_problems(security))):
+        if found:
+            return None, f"reading trust model: {rel}: {found[0]}; findings unfiltered"
+
+    return (model, security), None
 
 
 def identity_ok(identity: object) -> bool:
@@ -162,6 +215,13 @@ def model_problems(model: dict) -> list:
             if component not in components:
                 found.append(f"attacker {attacker.get('id')} reaches unknown component {component}")
 
+    attackers = [attacker for attacker in entries(model, "attackers") if isinstance(attacker, dict)]
+
+    reaching = [attacker for attacker in attackers if isinstance(attacker.get("reaches"), list) and attacker["reaches"]]
+
+    if attackers and not reaching:
+        found.append("at least one attacker must reach a component")
+
     for boundary in entries(model, "boundaries"):
         if not isinstance(boundary, dict):
             continue
@@ -219,9 +279,15 @@ def problems(repo: Path) -> list[str]:
 
 
 def main() -> None:
-    if len(sys.argv) != 3 or sys.argv[1] != "check":
+    if len(sys.argv) != 3 or sys.argv[1] not in ("check", "base"):
         print(USAGE, file=sys.stderr)
         sys.exit(2)
+
+    if sys.argv[1] == "base":
+        known, warning = model_at(sys.argv[2])
+        status = {"optedIn": known is not None}
+        print(json.dumps(status if warning is None else {**status, "warning": warning}))
+        sys.exit(0)
 
     found = problems(Path(sys.argv[2]))
 

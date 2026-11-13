@@ -5,10 +5,14 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
+
+import yaml
 
 import findings
 from findings import code_hash
+from test_trust_model import commit_files
 
 
 KEY = "MPL-1"
@@ -23,7 +27,12 @@ FIX_NOW = {"kind": "fix-now", "reason": None, "decidedAt": EARLIER}
 APPLIED = {"at": EARLIER, "commit": "c" * 40, "cardKey": None}
 LESSON = {"note": "Learning/Security/command-injection.md", "mode": "later", "at": EARLIER}
 RESUME = {"round": 1, "sentAt": EARLIER}
-USAGE = "usage: findings.py write KEY --head SHA\n"
+USAGE = "usage: findings.py write KEY --head SHA [--base SHA]\n"
+TEMPLATES = Path(__file__).parent.parent / "trust-model"
+MODEL = ".maple/trust-model.yaml"
+SECURITY = ".maple/security.yaml"
+CODE_IDENTITY = {"kind": "code", "class": "command-injection", "file": "src/x.ts", "hash": code_hash(CODE)}
+DEPENDENCY_IDENTITY = {"kind": "dependency", "advisory": "GHSA-1", "package": "lodash"}
 
 
 def item(**changes):
@@ -223,6 +232,92 @@ class TestWrite(unittest.TestCase):
                         self.assertEqual(json.load(handle), want_file)
                     self.assertEqual(got, want_summary)
                     self.assertEqual(os.listdir(folder), [f"{KEY}.json"])
+
+
+def parsed(**changes):
+    return findings.parse([item(**changes)])[0]
+
+
+def model_with(**changes):
+    return {**yaml.safe_load((TEMPLATES / "trust-model.yaml").read_text()), **changes}
+
+
+def security_with(**changes):
+    return {**yaml.safe_load((TEMPLATES / "security.yaml").read_text()), **changes}
+
+
+class TestSkipKnown(unittest.TestCase):
+    def test_skip_known(self):
+        dependency = {**DEPENDENCY_IDENTITY}
+        other_hash = {**CODE_IDENTITY, "hash": code_hash(OTHER_CODE)}
+        cases = [
+            (
+                "code identity in accepted is skipped",
+                [parsed()],
+                model_with(accepted=[{"identity": CODE_IDENTITY, "title": "t", "reason": "r"}]),
+                security_with(),
+                [],
+                1,
+            ),
+            (
+                "same class and file with another hash is kept",
+                [parsed()],
+                model_with(accepted=[{"identity": other_hash, "title": "t"}]),
+                security_with(),
+                [parsed()],
+                0,
+            ),
+            (
+                "dependency identity in tracked is skipped",
+                [parsed(identity=dependency), parsed()],
+                model_with(),
+                security_with(tracked=[{"identity": DEPENDENCY_IDENTITY, "card": None}]),
+                [parsed()],
+                1,
+            ),
+            (
+                "override raises a low input to medium",
+                [parsed(severity="low")],
+                model_with(overrides=[{"identity": CODE_IDENTITY, "severity": "medium"}]),
+                security_with(),
+                [parsed(severity="medium")],
+                0,
+            ),
+            (
+                "override turns medium into high",
+                [parsed(severity="medium")],
+                model_with(overrides=[{"identity": CODE_IDENTITY, "severity": "high"}]),
+                security_with(),
+                [parsed()],
+                0,
+            ),
+            (
+                "override of low drops the input",
+                [parsed(), parsed(identity=dependency)],
+                model_with(overrides=[{"identity": CODE_IDENTITY, "severity": "low"}]),
+                security_with(),
+                [parsed(identity=dependency)],
+                1,
+            ),
+            (
+                "malformed entries are ignored",
+                [parsed()],
+                model_with(accepted=["MPL-1 F1", {"title": "t"}], overrides=[{"identity": CODE_IDENTITY}]),
+                security_with(tracked="none"),
+                [parsed()],
+                0,
+            ),
+        ]
+
+        for name, found, model, security, want, want_skipped in cases:
+            with self.subTest(name):
+                # given
+                # when
+                got, skipped = findings.skip_known(found, model, security)
+
+                # then
+                self.assertEqual(got, want)
+                self.assertEqual(skipped, want_skipped)
 
 
 class TestMain(unittest.TestCase):
@@ -425,6 +520,8 @@ class TestMain(unittest.TestCase):
             ),
             ("no arguments", ["findings.py"], good, None, 2, USAGE, None),
             ("no head", ["findings.py", "write", KEY], good, None, 2, USAGE, None),
+            ("base without a sha", [*argv, "--base"], good, None, 2, USAGE, None),
+            ("unknown option", [*argv, "--bass", "x"], good, None, 2, USAGE, None),
             (
                 "rename fails",
                 argv,
@@ -469,6 +566,114 @@ class TestMain(unittest.TestCase):
                     self.assertEqual(json.loads(stdout.getvalue()) if stdout.getvalue() else None, want_output)
                     self.assertEqual(os.path.exists(path), want_code == 0 or existing is not None)
                     self.assertEqual([entry for entry in os.listdir(folder) if entry.endswith(".tmp")], [])
+
+        model_text = (TEMPLATES / "trust-model.yaml").read_text()
+        security_text = (TEMPLATES / "security.yaml").read_text()
+        model_data = yaml.safe_load(model_text)
+        accepted = yaml.safe_dump({**model_data, "accepted": [{"identity": CODE_IDENTITY}]})
+        raised = yaml.safe_dump({**model_data, "overrides": [{"identity": CODE_IDENTITY, "severity": "high"}]})
+        lifted = yaml.safe_dump({**model_data, "overrides": [{"identity": CODE_IDENTITY, "severity": "medium"}]})
+        two = json.dumps([item(), other_item()])
+        base_cases = [
+            (
+                "base opted in skips the accepted input",
+                {MODEL: accepted, SECURITY: security_text},
+                None,
+                two,
+                {"round": 1, "ids": ["F1"], "dropped": 0, "skipped": 1},
+                {"F1": "high"},
+            ),
+            (
+                "base opted in with nothing to skip prints skipped 0",
+                {MODEL: model_text, SECURITY: security_text},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0, "skipped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
+            (
+                "undecided finding accepted at the base is removed",
+                {MODEL: accepted, SECURITY: security_text},
+                old_file([stored("F1")]),
+                json.dumps([item()]),
+                {"round": 2, "ids": [], "dropped": 0, "skipped": 1},
+                {},
+            ),
+            (
+                "override at the base sets the written severity",
+                {MODEL: raised, SECURITY: security_text},
+                None,
+                json.dumps([item(severity="medium")]),
+                {"round": 1, "ids": ["F1"], "dropped": 0, "skipped": 0},
+                {"F1": "high"},
+            ),
+            (
+                "override at the base raises a low input",
+                {MODEL: lifted, SECURITY: security_text},
+                None,
+                json.dumps([item(severity="low"), other_item(severity="low")]),
+                {"round": 1, "ids": ["F1"], "dropped": 1, "skipped": 0},
+                {"F1": "medium"},
+            ),
+            (
+                "base with security off keeps everything",
+                {MODEL: accepted, SECURITY: security_text.replace("enabled: true", "enabled: false")},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
+            (
+                "base without the files keeps everything",
+                {},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
+            (
+                "bad yaml at the base keeps everything and warns",
+                {MODEL: "assets: [\n", SECURITY: security_text},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
+        ]
+
+        for name, files, existing, stdin_text, want_output, want_severities in base_cases:
+            with self.subTest(name):
+                # given
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as repo, mock.patch.dict(
+                    os.environ, {"MAPLE_FINDINGS_DIR": folder}
+                ):
+                    base = commit_files(repo, files)
+                    args = ["findings.py", "write", KEY, "--head", HEAD, "--base", base]
+                    path = os.path.join(folder, f"{KEY}.json")
+                    if existing is not None:
+                        with open(path, "w") as handle:
+                            json.dump(existing, handle)
+
+                    # when
+                    with contextlib.chdir(repo), mock.patch.object(sys, "argv", args), mock.patch.object(
+                        sys, "stdin", io.StringIO(stdin_text)
+                    ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                        findings.main()
+
+                    # then
+                    got = json.loads(stdout.getvalue())
+                    warning = got.pop("warning", None)
+                    self.assertEqual(got, want_output)
+                    self.assertEqual(stderr.getvalue(), "")
+                    with open(path) as handle:
+                        written = json.load(handle)["findings"]
+                    self.assertEqual({finding["id"]: finding["severity"] for finding in written}, want_severities)
+                    if name.endswith("warns"):
+                        self.assertRegex(warning, rf"\Areading trust model: {MODEL}: .+; findings unfiltered\Z")
+                    else:
+                        self.assertIsNone(warning)
 
 
 class TestFindingsPath(unittest.TestCase):

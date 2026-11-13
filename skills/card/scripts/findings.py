@@ -23,7 +23,7 @@ CHIPS = {
 }
 PROSE = ("what", "how", "impact", "defense")
 REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips")
-USAGE = "usage: findings.py write KEY --head SHA"
+USAGE = "usage: findings.py write KEY --head SHA | read KEY | applied KEY ID [--commit SHA] [--card KEY]"
 
 
 def findings_path(key: str) -> Path:
@@ -215,35 +215,91 @@ def write(key: str, head: str, items: object, now: str) -> dict:
         raise ValueError(f"reading findings input: {error}") from error
     path = findings_path(key)
     merged = {**merge(read_existing(path), incoming, head, now), "card": key}
+    save(path, merged)
+    ids = [finding["id"] for finding in merged["findings"] if finding["decision"] is None]
+    return {"round": merged["round"], "ids": ids, "dropped": dropped}
+
+
+def save(path: Path, data: dict) -> None:
     temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        temp.write_text(json.dumps(merged, indent=2) + "\n")
+        temp.write_text(json.dumps(data, indent=2) + "\n")
         os.replace(temp, path)
     except OSError as error:
         raise ValueError(f"writing findings: {path.name}: {error.strerror or error}") from error
     finally:
         temp.unlink(missing_ok=True)
-    ids = [finding["id"] for finding in merged["findings"] if finding["decision"] is None]
-    return {"round": merged["round"], "ids": ids, "dropped": dropped}
+
+
+def read(key: str) -> list:
+    existing = read_existing(findings_path(key))
+    found = existing["findings"] if existing else []
+    return [
+        {**finding, "severity": finding.get("severityOverride") or finding.get("severity")}
+        for finding in found
+        if finding["decision"] is not None and finding["applied"] is None
+    ]
+
+
+def mark_applied(key: str, finding_id: str, commit: str | None, card: str | None, at: str) -> None:
+    path = findings_path(key)
+    existing = read_existing(path)
+    found = existing["findings"] if existing else []
+    target = next((finding for finding in found if finding["id"] == finding_id), None)
+    if existing is None or target is None:
+        raise ValueError(f"marking finding applied: no finding {finding_id}")
+    if target["decision"] is None:
+        raise ValueError(f"marking finding applied: {finding_id} is not decided")
+    target["applied"] = {"at": at, "commit": commit, "cardKey": card}
+    save(path, existing)
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def usage() -> None:
+    print(USAGE, file=sys.stderr)
+    sys.exit(2)
+
+
+def applied_flags(args: list) -> dict:
+    if len(args) % 2:
+        usage()
+    flags = dict(zip(args[::2], args[1::2]))
+    if set(flags) - {"--commit", "--card"} or len(flags) * 2 != len(args) or not all(flags.values()):
+        usage()
+    if "--card" in flags and not KEY.match(flags["--card"]):
+        usage()
+    return flags
+
+
+def run(args: list) -> object:
+    if len(args) == 4 and args[0] == "write" and args[2] == "--head" and args[3]:
+        try:
+            items = json.load(sys.stdin)
+        except ValueError as error:
+            raise ValueError("reading findings input: not valid JSON") from error
+        return write(args[1], args[3], items, now())
+    if len(args) == 2 and args[0] == "read" and KEY.match(args[1]):
+        return read(args[1])
+    if len(args) >= 3 and args[0] == "applied" and KEY.match(args[1]):
+        flags = applied_flags(args[3:])
+        mark_applied(args[1], args[2], flags.get("--commit"), flags.get("--card"), now())
+        return None
+    usage()
+    return None
 
 
 def main() -> None:
-    args = sys.argv[1:]
-    if len(args) != 4 or args[0] != "write" or args[2] != "--head" or not args[3]:
-        print(USAGE, file=sys.stderr)
-        sys.exit(2)
     try:
-        items = json.load(sys.stdin)
-    except ValueError:
-        print("reading findings input: not valid JSON", file=sys.stderr)
-        sys.exit(1)
-    try:
-        result = write(args[1], args[3], items, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        result = run(sys.argv[1:])
     except ValueError as error:
         print(error, file=sys.stderr)
         sys.exit(1)
-    print(json.dumps(result))
+    if result is not None:
+        print(json.dumps(result))
 
 
 if __name__ == "__main__":

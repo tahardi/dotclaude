@@ -16,7 +16,7 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 | `statusline.sh` | Two-line status bar for Claude Code: model, folder, branch, context use, and plan limits. Needs jq and git |
 | `install.sh` | `install.sh desktop` links the files above into `~/.claude` and moves anything it replaces to `~/.claude/dotclaude-backup/`; `install.sh vm` copies the VM settings, `CLAUDE.md`, the status line, and the skills into `/etc/claude-code`, where the VM user cannot change them |
 
-`/card` runs a security pass after CI passes. A finding with a clear fix is fixed in the PR, and Taylor only reads about it. Every other medium or high finding goes, in plain English, to the card's findings file in `$MAPLE_FINDINGS_DIR` (default `~/.config/maple/findings`), where Maple shows it for Taylor to decide. Low findings are dropped, and no finding keeps the card out of In Review.
+`/card` runs a security pass after CI passes. A finding with a clear fix is fixed in the PR, and Taylor only reads about it. Every other medium or high finding goes, in plain English, to the card's findings file in `$MAPLE_FINDINGS_DIR` (default `~/.config/maple/findings`), where Maple shows it for Taylor to decide. Low findings are dropped, and no finding keeps the card out of In Review. Once Taylor has decided every finding, Maple asks `/card` to apply the decisions: it fixes Fix now findings, files Fix later cards for refinement, posts one summary on the PR, and runs the security pass again.
 
 When `/card` finds a PR Taylor merged, it treats the PR as approved and skips review: card to Done, worktree and branch removed, the PR's card impacts applied (which can create new Jira cards), and its test cards moved to Done.
 

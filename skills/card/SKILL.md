@@ -138,7 +138,21 @@ part, and merging the PR turns security on for the repo.
      entry, starting with its id in backticks.
    - Leave `accepted`, `overrides`, and `tracked` empty. Only scripts write entries there.
 4. Run `python3 ~/.claude/skills/card/scripts/trust_model.py check .` and fix the files until it exits 0.
-5. Commit, then continue at Workflow step 8.
+5. Triage the issues the repo already has, once, so they become backlog cards at merge and no later card raises them:
+   1. Start the Security Pass subagent as in "Security Pass" step 2, with two changes: it reviews the whole repo, every
+      file in `git ls-files` except lockfiles, vendored, and generated files, in place of the diff; and its model is the
+      worktree's new `.maple/trust-model.yaml`, with the opted-in rating rules.
+   2. Treat its output as in "Security Pass" step 3. Use the Write tool to save it, with `"sources": ["security-pass"]`
+      added to each finding, as one JSON array in a new scratchpad file, never a heredoc.
+   3. From the worktree, run `python3 ~/.claude/skills/card/scripts/trust_model.py track . < <file>`. It drops `low`
+      issues, merges repeats, skips issues already tracked, adds a `tracked` line with `"card": null` to
+      `.maple/security.yaml` for each new one, and prints the new issues. If it exits 1 with
+      `reading findings input:`, fix the data it names and run it again.
+   4. For each issue it printed, add one bullet to the PR's "Card impacts": `- New card: <title> (epic <this card's
+      epic, or none>, labels needs-refinement,security-finding): <what> <how> <impact> Defense: <defense> Found in
+      <file>:<line> by the opt-in triage.` When this card has the `test-card` label, start the summary with `[TEST] `
+      and add `test-card` to the labels.
+6. Commit, then continue at Workflow step 8.
 
 ## Agent Review
 
@@ -388,9 +402,10 @@ reviewed it with the code.
 2. **New cards:** for each one, pipe its description to
    `jira.py create <PROJECT> "<summary>" --epic <epic> --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`.
    Start the description with the three-bullet summary from the refine skill's Template (`- **Problem:**`,
-   `- **Goal:**`, `- **Done when:**`, plain English for Taylor). Use the label `needs-refinement` unless the impact
-   gave the card full steps and acceptance criteria. Add
-   `parallelizable` only when the impact says so. Note the new key it prints.
+   `- **Goal:**`, `- **Done when:**`, plain English for Taylor). Use the labels the impact names, and add
+   `needs-refinement` unless the impact gave the card full steps and acceptance criteria. Add `parallelizable` only
+   when the impact says so. Leave out `--epic`, `--points`, `--blocked-by`, or `--blocks` when the impact gives none.
+   Note the new key it prints.
 3. **The plan:** if the card's description names a plan note in the Obsidian vault, append one line per impact under
    an `## Amendments` heading at the end of that note (create the heading if missing), using the obsidian-notes skill:
    `- YYYY-MM-DD KEY: <impact>, applied as <OTHER key or new key>`.

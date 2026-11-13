@@ -11,6 +11,7 @@ from unittest import mock
 import yaml
 
 import trust_model
+from findings import code_hash
 from trust_model import problems
 
 TEMPLATES = Path(__file__).parent.parent / "trust-model"
@@ -19,7 +20,7 @@ MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
 CODE = {"kind": "code", "class": "command-injection", "file": "api/run.go", "hash": "0123456789abcdef"}
 DEPENDENCY = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
-USAGE = "usage: trust_model.py check DIR | base SHA\n"
+USAGE = "usage: trust_model.py check DIR | base SHA | track DIR\n"
 REAL_RUN = subprocess.run
 MISSING = f"checking trust model: {MODEL} is missing\nchecking trust model: {SECURITY} is missing\n"
 
@@ -445,6 +446,133 @@ class TestAtBase(unittest.TestCase):
                     self.assertIsNone(error)
                 else:
                     self.assertTrue(error and error.startswith(want_error) and len(error) > len(want_error), error)
+
+
+def issue(severity="high", code='eval "$1"', title="Shell runs input"):
+    return {
+        "severity": severity,
+        "identity": {"kind": "code", "class": "command-injection", "file": "run.sh", "code": code},
+        "line": 3,
+        "sources": ["security-pass"],
+        "title": title,
+        "what": "w",
+        "how": "h",
+        "impact": "i",
+        "defense": "d",
+        "chips": ["runs-code"],
+    }
+
+
+def tracked_line(code='eval "$1"', title="Shell runs input"):
+    identity = {"kind": "code", "class": "command-injection", "file": "run.sh", "hash": code_hash(code)}
+    return "  - " + json.dumps({"identity": identity, "title": title, "card": None})
+
+
+def printed(severity="high", title="Shell runs input"):
+    return {
+        "title": title,
+        "severity": severity,
+        "file": "run.sh",
+        "line": 3,
+        "what": "w",
+        "how": "h",
+        "impact": "i",
+        "defense": "d",
+    }
+
+
+class TestTrack(unittest.TestCase):
+    def test_track(self):
+        cases = [
+            (
+                "one identity twice gives one line",
+                "version: 1\nenabled: true\ntracked:\n",
+                [issue("medium"), issue("high", title="Again")],
+                0,
+                [printed("high")],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+            ),
+            (
+                "low is dropped",
+                "version: 1\nenabled: true\ntracked:\n",
+                [issue("low")],
+                0,
+                [],
+                "",
+                "version: 1\nenabled: true\ntracked:\n",
+            ),
+            (
+                "already tracked is skipped",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+                [issue(), issue(code="sh -c \"$2\"", title="Second")],
+                0,
+                [printed(title="Second")],
+                "",
+                "version: 1\nenabled: true\ntracked:\n"
+                + tracked_line()
+                + "\n"
+                + tracked_line(code="sh -c \"$2\"", title="Second")
+                + "\n",
+            ),
+            (
+                "lines go under tracked when it is not last",
+                "version: 1\ntracked: []\nenabled: true\n",
+                [issue()],
+                0,
+                [printed()],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+            ),
+            (
+                "bad input",
+                "version: 1\nenabled: true\ntracked:\n",
+                [{**issue(), "title": ""}],
+                1,
+                None,
+                "reading findings input: item 1: title is not a non-empty string\n",
+                "version: 1\nenabled: true\ntracked:\n",
+            ),
+            (
+                "no security file",
+                None,
+                [issue()],
+                1,
+                None,
+                f"reading trust model: {SECURITY} is missing\n",
+                None,
+            ),
+        ]
+
+        for name, before, inputs, code, out, err, after in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                # given
+                repo = Path(directory)
+                if before is not None:
+                    (repo / SECURITY).parent.mkdir(parents=True)
+                    (repo / SECURITY).write_text(before)
+                stdout, stderr = io.StringIO(), io.StringIO()
+                argv = ["trust_model.py", "track", directory]
+
+                # when
+                with (
+                    mock.patch("sys.argv", argv),
+                    mock.patch("sys.stdin", io.StringIO(json.dumps(inputs))),
+                    contextlib.redirect_stdout(stdout),
+                    contextlib.redirect_stderr(stderr),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    trust_model.main()
+
+                # then
+                self.assertEqual(raised.exception.code, code)
+                if out is None:
+                    self.assertEqual(stdout.getvalue(), "")
+                else:
+                    self.assertEqual(json.loads(stdout.getvalue()), out)
+                self.assertEqual(stderr.getvalue(), err)
+                if after is not None:
+                    self.assertEqual((repo / SECURITY).read_text(), after)
 
 
 if __name__ == "__main__":

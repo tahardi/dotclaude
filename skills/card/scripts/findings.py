@@ -69,6 +69,60 @@ def identity_of(value: object) -> dict:
     raise ValueError("identity kind is not code or dependency")
 
 
+def items_of(value: object, name: str, low: int, high: int, what: str) -> list:
+    if not isinstance(value, list) or not low <= len(value) <= high:
+        raise ValueError(f"{name} is not a list of {low} to {high} {what}")
+    return value
+
+
+def path_of(value: object) -> list:
+    steps = []
+    for number, entry in enumerate(items_of(value, "path", 2, 6, "steps"), start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(f"path step {number} is not an object")
+        steps.append(
+            {
+                "actor": text(entry.get("actor"), f"path step {number} actor", 40),
+                "step": text(entry.get("step"), f"path step {number} step", 120),
+            }
+        )
+    return steps
+
+
+def map_of(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("map is not an object")
+    zones = [text(zone, "map zone", 40) for zone in items_of(value.get("zones"), "map zones", 2, 6, "names")]
+    for zone in zones:
+        if zones.count(zone) > 1:
+            raise ValueError(f"map zones repeat {zone}")
+    for end in ("from", "to"):
+        if value.get(end) not in zones:
+            raise ValueError(f"map {end} is not one of the zones")
+    if value["from"] == value["to"]:
+        raise ValueError("map from and to are the same zone")
+    return {"zones": zones, "from": value["from"], "to": value["to"]}
+
+
+def reach_of(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("reach is not an object")
+    now = items_of(value.get("now"), "reach now", 1, 4, "items")
+    after = items_of(value.get("afterFix", []), "reach afterFix", 0, 4, "items")
+    return {
+        "now": [text(entry, "reach now item", 120) for entry in now],
+        "afterFix": [text(entry, "reach afterFix item", 120) for entry in after],
+    }
+
+
+def check_visual(visual: dict) -> dict | None:
+    if not isinstance(visual, dict):
+        raise ValueError("is not an object")
+    parts = {"path": path_of, "map": map_of, "reach": reach_of}
+    checked = {name: check(visual[name]) for name, check in parts.items() if visual.get(name) is not None}
+    return checked or None
+
+
 def finding_of(value: object) -> dict:
     if not isinstance(value, dict):
         raise ValueError("not an object")
@@ -108,9 +162,14 @@ def parse(items: object) -> list:
     parsed = []
     for number, value in enumerate(items, start=1):
         try:
-            parsed.append(finding_of(value))
+            finding = finding_of(value)
         except ValueError as error:
             raise ValueError(f"item {number}: {error}") from error
+        try:
+            visual = check_visual(value["visual"]) if value.get("visual") is not None else None
+        except ValueError as error:
+            raise ValueError(f"item {number} visual: {error}") from error
+        parsed.append(finding if visual is None else {**finding, "visual": visual})
     return parsed
 
 
@@ -136,6 +195,8 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
             combined[key]["sources"] = list(dict.fromkeys(sources))
             if finding["severity"] == "high":
                 combined[key]["severity"] = "high"
+            if "visual" in finding and "visual" not in combined[key]:
+                combined[key]["visual"] = finding["visual"]
         else:
             combined[key] = dict(finding)
 
@@ -146,7 +207,8 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
         undecided = [other for other in matches if other["decision"] is None]
         held = [other for other in matches if other["decision"] is not None and not refixed(other)]
         if undecided:
-            updated[undecided[0]["id"]] = {**undecided[0], **finding}
+            kept_fields = {name: field for name, field in undecided[0].items() if name != "visual"}
+            updated[undecided[0]["id"]] = {**kept_fields, **finding}
         elif not held:
             highest += 1
             new = {"id": f"F{highest}", **finding, "applied": None, "decision": None, "severityOverride": None}

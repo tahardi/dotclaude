@@ -25,14 +25,17 @@ DEV_PACKAGE_JSON = '{"name": "x", "version": "1.0.0", "devDependencies": {"lodas
 NPM = {"package.json": PACKAGE_JSON % "1.0.0", "package-lock.json": "{}"}
 
 
-def fake_bin(root, **exits):
+def fake_bin(root, ci=None, **exits):
     bin_dir = root / "fake-bin"
     bin_dir.mkdir()
     for name, body in exits.items():
         path = bin_dir / name
         path.write_text(f"#!/bin/sh\nexit {body}\n" if isinstance(body, int) else f"#!/bin/sh\n{body}\n")
         path.chmod(0o755)
-    return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env = {k: v for k, v in os.environ.items() if k != "CI"}
+    if ci:
+        env["CI"] = ci
+    return {**env, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
 
 class KitTestCase(unittest.TestCase):
@@ -106,6 +109,26 @@ class TestSecurityMk(KitTestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 for tool in tools:
                     self.assertIn(f"warning: skipping {tool}: cannot reach", result.stdout)
+
+    def test_offline_in_ci(self):
+        cases = [
+            ("secrets", "security-secrets", "error: cannot reach https://proxy.golang.org for gitleaks"),
+            ("workflows", "security-workflows", "error: cannot reach https://proxy.golang.org for actionlint"),
+            ("deps", "security-deps", "error: cannot reach https://api.osv.dev for osv-scanner"),
+        ]
+        for name, target, message in cases:
+            with self.subTest(name):
+                # given
+                self.setUp()
+                env = fake_bin(self.repo, ci="true", curl=7)
+
+                # when
+                result = self.make(target, env=env)
+
+                # then
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(message, result.stdout)
+                self.assertNotIn("warning: skipping", result.stdout)
 
     def test_tool_failure(self):
         failing = {"curl": 0, "go": 3, "npm": 3, "uvx": 3}

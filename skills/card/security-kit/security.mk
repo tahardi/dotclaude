@@ -7,7 +7,8 @@ govulncheck_version = v1.9.0
 security_results = security-results
 
 online = curl --silent --head --max-time 5 --output /dev/null $(1) \
-	|| { echo "warning: skipping $(2): cannot reach $(1)"; exit 0; }
+	|| { [ -z "$${CI:-}" ] || { echo "error: cannot reach $(1) for $(2)"; exit 1; }; \
+	echo "warning: skipping $(2): cannot reach $(1)"; exit 0; }
 
 security_deps = security-deps-osv-scanner
 ifneq ($(wildcard go.mod),)

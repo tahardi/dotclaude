@@ -284,7 +284,10 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
      turns security off, and `medium` otherwise;
    - prose that says in plain words what changed, and that a weaker model hides findings on later cards.
 
-   If it exits non-zero, tell the user what it printed and carry on.
+   If it exits non-zero, tell the user what it printed, and add one `high`, `decide` finding with identity
+   `{"kind": "code", "class": "trust-model-change", "file": ".maple/trust-model.yaml", "code": "model edits not
+   checked"}`, `line` `null`, chips `["bypasses-access"]`, and prose saying the trust model edits in this PR could not
+   be checked, so Taylor still looks at them.
 7. Write the findings once, after both rounds, because each write replaces the undecided findings in the file. Use the
    Write tool to save every `decide` finding from both rounds and step 6, with `"sources": ["security-pass"]` added to
    each, as one JSON array in a new scratchpad file, never a heredoc. Save `[]` when there are none, so findings from

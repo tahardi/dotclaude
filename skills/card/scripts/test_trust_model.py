@@ -368,6 +368,16 @@ class TestMain(unittest.TestCase):
                 after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
             ),
             main_case(
+                "diff of a hand edit to a model marked binary",
+                diff,
+                [write(".gitattributes", "*.yaml binary\n*.yaml -diff\n")],
+                0,
+                json.dumps([{"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]}])
+                + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+            ),
+            main_case(
                 "diff after apply",
                 diff,
                 [],

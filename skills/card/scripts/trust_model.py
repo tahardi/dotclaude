@@ -423,7 +423,16 @@ def model_diff(key: str, base: str) -> list[dict]:
         return []
 
     expected = {line for lines in entry_lines(findings_file(key)).values() for line in lines}
-    flags = ["--unified=0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]
+    flags = [
+        "--unified=0",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-renames",
+        "--text",
+        "--no-textconv",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+    ]
     result = git(["diff", *flags, base, "--", MD, MODEL, SECURITY], "diffing trust model")
 
     if result.returncode != 0:

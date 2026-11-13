@@ -350,6 +350,39 @@ class TestCheckVisual(unittest.TestCase):
                 "reach afterFix is not a list of 0 to 4 items",
             ),
             ("not an object", ["path"], None, "is not an object"),
+            ("only unknown keys returns None", {"chart": "pie"}, None, None),
+            ("only null parts returns None", {"path": None, "map": None, "reach": None}, None, None),
+            (
+                "a missing afterFix is stored as empty",
+                {"reach": {"now": ["Run code."]}},
+                {"reach": {"now": ["Run code."], "afterFix": []}},
+                None,
+            ),
+            ("to not in zones", zones_map(["a", "b"], end="c"), None, "map to is not one of the zones"),
+            ("a path step that is not an object", {"path": [step(), "x"]}, None, "path step 2 is not an object"),
+            ("a map that is not an object", {"map": ["a", "b"]}, None, "map is not an object"),
+            ("a reach that is not an object", {"reach": ["x"]}, None, "reach is not an object"),
+            ("a zone that is not a string", zones_map(["a", 2]), None, "map zone is not a non-empty string"),
+            ("an empty zone", zones_map(["a", " "]), None, "map zone is not a non-empty string"),
+            ("a 41-character zone", zones_map(["a", "b" * 41]), None, "map zone is over 40 characters"),
+            (
+                "a reach item that is not a string",
+                {"reach": {"now": [3]}},
+                None,
+                "reach now item is not a non-empty string",
+            ),
+            (
+                "an empty afterFix item",
+                {"reach": {"now": ["Run code."], "afterFix": [""]}},
+                None,
+                "reach afterFix item is not a non-empty string",
+            ),
+            (
+                "a 121-character reach item",
+                {"reach": {"now": ["a" * 121]}},
+                None,
+                "reach now item is over 120 characters",
+            ),
         ]
 
         for name, visual, want, want_error in cases:

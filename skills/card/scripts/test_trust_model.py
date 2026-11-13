@@ -467,6 +467,9 @@ def issue(severity="high", code='eval "$1"', title="Shell runs input"):
 DEPENDENCY_INPUT = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
 
 
+DEPENDENCY_LINE = "  - " + json.dumps({"identity": DEPENDENCY, "title": "Shell runs input", "card": None})
+
+
 def fail(*args, **kwargs):
     raise OSError(28, "No space left on device")
 
@@ -500,6 +503,7 @@ class TestTrack(unittest.TestCase):
                 [printed("high")],
                 "",
                 "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+                os.replace,
             ),
             (
                 "low is dropped",
@@ -509,6 +513,7 @@ class TestTrack(unittest.TestCase):
                 [],
                 "",
                 "version: 1\nenabled: true\ntracked:\n",
+                os.replace,
             ),
             (
                 "already tracked is skipped",
@@ -522,6 +527,7 @@ class TestTrack(unittest.TestCase):
                 + "\n"
                 + tracked_line(code="sh -c \"$2\"", title="Second")
                 + "\n",
+                os.replace,
             ),
             (
                 "lines go under tracked when it is not last",
@@ -531,6 +537,7 @@ class TestTrack(unittest.TestCase):
                 [printed()],
                 "",
                 "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+                os.replace,
             ),
             (
                 "bad input",
@@ -540,6 +547,7 @@ class TestTrack(unittest.TestCase):
                 None,
                 "reading findings input: item 1: title is not a non-empty string\n",
                 "version: 1\nenabled: true\ntracked:\n",
+                os.replace,
             ),
             (
                 "no security file",
@@ -549,6 +557,7 @@ class TestTrack(unittest.TestCase):
                 None,
                 f"reading trust model: {SECURITY} is missing\n",
                 None,
+                os.replace,
             ),
             (
                 "medium after low with one identity is kept",
@@ -558,6 +567,7 @@ class TestTrack(unittest.TestCase):
                 [printed("medium", title="Again")],
                 "",
                 "version: 1\nenabled: true\ntracked:\n" + tracked_line(title="Again") + "\n",
+                os.replace,
             ),
             (
                 "unknown severity counts as high",
@@ -567,6 +577,7 @@ class TestTrack(unittest.TestCase):
                 [printed("high")],
                 "",
                 "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+                os.replace,
             ),
             (
                 "dependency names its package",
@@ -575,7 +586,8 @@ class TestTrack(unittest.TestCase):
                 0,
                 [{**printed(), "file": "lodash", "line": None}],
                 "",
-                "version: 1\nenabled: true\ntracked:\n" + "  - " + json.dumps({"identity": DEPENDENCY, "title": "Shell runs input", "card": None}) + "\n",
+                "version: 1\nenabled: true\ntracked:\n" + DEPENDENCY_LINE + "\n",
+                os.replace,
             ),
             (
                 "no tracked key",
@@ -585,6 +597,7 @@ class TestTrack(unittest.TestCase):
                 [printed()],
                 "",
                 "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+                os.replace,
             ),
             (
                 "input not JSON",
@@ -594,6 +607,7 @@ class TestTrack(unittest.TestCase):
                 None,
                 "reading findings input: not valid JSON\n",
                 "version: 1\nenabled: true\ntracked:\n",
+                os.replace,
             ),
             (
                 "security file bad yaml",
@@ -603,6 +617,7 @@ class TestTrack(unittest.TestCase):
                 None,
                 Reading(SECURITY),
                 "enabled: : true\n",
+                os.replace,
             ),
             (
                 "security file not a mapping",
@@ -612,6 +627,7 @@ class TestTrack(unittest.TestCase):
                 None,
                 Reading(SECURITY),
                 "true\n",
+                os.replace,
             ),
             (
                 "write fails",
@@ -621,10 +637,11 @@ class TestTrack(unittest.TestCase):
                 None,
                 f"writing trust model: {SECURITY}: No space left on device\n",
                 "version: 1\nenabled: true\ntracked:\n",
+                fail,
             ),
         ]
 
-        for name, before, inputs, code, out, err, after in cases:
+        for name, before, inputs, code, out, err, after, replace_file in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 # given
                 repo = Path(directory)
@@ -633,12 +650,13 @@ class TestTrack(unittest.TestCase):
                     (repo / SECURITY).write_text(before)
                 stdout, stderr = io.StringIO(), io.StringIO()
                 argv = ["trust_model.py", "track", directory]
+                stdin = inputs if isinstance(inputs, str) else json.dumps(inputs)
 
                 # when
                 with (
                     mock.patch("sys.argv", argv),
-                    mock.patch("sys.stdin", io.StringIO(inputs if isinstance(inputs, str) else json.dumps(inputs))),
-                    mock.patch.object(trust_model.os, "replace", side_effect=fail if name == "write fails" else os.replace),
+                    mock.patch("sys.stdin", io.StringIO(stdin)),
+                    mock.patch.object(trust_model.os, "replace", side_effect=replace_file),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
                     self.assertRaises(SystemExit) as raised,
@@ -654,6 +672,8 @@ class TestTrack(unittest.TestCase):
                 self.assertEqual(stderr.getvalue().rstrip("\n") if isinstance(err, Reading) else stderr.getvalue(), err)
                 if after is not None:
                     self.assertEqual((repo / SECURITY).read_text(), after)
+                    names = sorted(path.name for path in (repo / SECURITY).parent.iterdir())
+                    self.assertEqual(names, ["security.yaml"])
 
 
 if __name__ == "__main__":

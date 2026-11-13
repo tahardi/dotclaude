@@ -33,6 +33,15 @@ MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
 CODE_IDENTITY = {"kind": "code", "class": "command-injection", "file": "src/x.ts", "hash": code_hash(CODE)}
 DEPENDENCY_IDENTITY = {"kind": "dependency", "advisory": "GHSA-1", "package": "lodash"}
+VISUAL = {
+    "path": [
+        {"actor": "a stranger on the internet", "step": "Opens a pull request with a crafted branch name."},
+        {"actor": "the build server", "step": "Runs the branch name as part of a shell command."},
+    ],
+    "map": {"zones": ["the internet", "the build server"], "from": "the internet", "to": "the build server"},
+    "reach": {"now": ["Run any command on the build server."], "afterFix": []},
+}
+OTHER_VISUAL = {"reach": {"now": ["Read the deploy token."], "afterFix": ["Nothing."]}}
 
 
 def item(**changes):
@@ -211,6 +220,41 @@ class TestWrite(unittest.TestCase):
                 ),
                 {"round": 2, "ids": ["F1"], "dropped": 0},
             ),
+            (
+                "a visual is stored on its finding",
+                None,
+                [item(visual=VISUAL), other_item()],
+                file(1, [stored("F1", visual=VISUAL), other_stored("F2")]),
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+            ),
+            (
+                "two inputs with one identity keep the first non-empty visual",
+                None,
+                [item(), item(visual={}), item(visual=VISUAL), item(visual=OTHER_VISUAL)],
+                file(1, [stored("F1", visual=VISUAL)]),
+                {"round": 1, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "an undecided finding updated with a visual takes it",
+                old_file([stored("F1", visual=OTHER_VISUAL)]),
+                [item(visual=VISUAL)],
+                file(2, [stored("F1", visual=VISUAL)]),
+                {"round": 2, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "an undecided finding updated without a visual loses its old one",
+                old_file([stored("F1", visual=VISUAL)]),
+                [item()],
+                file(2, [stored("F1")]),
+                {"round": 2, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "a decided finding keeps its visual",
+                old_file([stored("F1", decision=DECIDED, visual=VISUAL)]),
+                [item(visual=OTHER_VISUAL)],
+                file(2, [stored("F1", decision=DECIDED, visual=VISUAL)]),
+                {"round": 2, "ids": [], "dropped": 0},
+            ),
         ]
 
         for name, existing, items, want_file, want_summary in cases:
@@ -244,6 +288,120 @@ def model_with(**changes):
 
 def security_with(**changes):
     return {**yaml.safe_load((TEMPLATES / "security.yaml").read_text()), **changes}
+
+
+def step(actor="a stranger on the internet", text="Opens a pull request."):
+    return {"actor": actor, "step": text}
+
+
+def zones_map(zones, start="a", end="b"):
+    return {"map": {"zones": zones, "from": start, "to": end}}
+
+
+class TestCheckVisual(unittest.TestCase):
+    def test_check_visual(self):
+        cases = [
+            ("a full visual is returned as is", VISUAL, VISUAL, None),
+            (
+                "unknown keys are dropped",
+                {
+                    "path": [{**step(), "color": "red"}, step()],
+                    "map": {"zones": ["a", "b"], "from": "a", "to": "b", "arrow": "thick"},
+                    "reach": {"now": ["Run code."], "afterFix": [], "later": ["x"]},
+                    "chart": "pie",
+                },
+                {
+                    "path": [step(), step()],
+                    "map": {"zones": ["a", "b"], "from": "a", "to": "b"},
+                    "reach": {"now": ["Run code."], "afterFix": []},
+                },
+                None,
+            ),
+            ("an empty object returns None", {}, None, None),
+            ("one part alone is kept", OTHER_VISUAL, OTHER_VISUAL, None),
+            ("one path step", {"path": [step()]}, None, "path is not a list of 2 to 6 steps"),
+            ("seven path steps", {"path": [step()] * 7}, None, "path is not a list of 2 to 6 steps"),
+            (
+                "a 41-character actor",
+                {"path": [step(), step(actor="a" * 41)]},
+                None,
+                "path step 2 actor is over 40 characters",
+            ),
+            (
+                "a 121-character step",
+                {"path": [step(text="a" * 121), step()]},
+                None,
+                "path step 1 step is over 120 characters",
+            ),
+            ("one zone", zones_map(["a"]), None, "map zones is not a list of 2 to 6 names"),
+            ("a repeated zone", zones_map(["a", "b", "a"]), None, "map zones repeat a"),
+            ("from equal to to", zones_map(["a", "b"], end="a"), None, "map from and to are the same zone"),
+            ("from not in zones", zones_map(["a", "b"], start="c"), None, "map from is not one of the zones"),
+            (
+                "an empty now",
+                {"reach": {"now": [], "afterFix": []}},
+                None,
+                "reach now is not a list of 1 to 4 items",
+            ),
+            (
+                "five afterFix items",
+                {"reach": {"now": ["Run code."], "afterFix": ["x"] * 5}},
+                None,
+                "reach afterFix is not a list of 0 to 4 items",
+            ),
+            ("not an object", ["path"], None, "is not an object"),
+            ("only unknown keys returns None", {"chart": "pie"}, None, None),
+            ("only null parts returns None", {"path": None, "map": None, "reach": None}, None, None),
+            (
+                "a missing afterFix is stored as empty",
+                {"reach": {"now": ["Run code."]}},
+                {"reach": {"now": ["Run code."], "afterFix": []}},
+                None,
+            ),
+            ("to not in zones", zones_map(["a", "b"], end="c"), None, "map to is not one of the zones"),
+            ("a path step that is not an object", {"path": [step(), "x"]}, None, "path step 2 is not an object"),
+            ("a map that is not an object", {"map": ["a", "b"]}, None, "map is not an object"),
+            ("a reach that is not an object", {"reach": ["x"]}, None, "reach is not an object"),
+            ("a zone that is not a string", zones_map(["a", 2]), None, "map zone is not a non-empty string"),
+            ("an empty zone", zones_map(["a", " "]), None, "map zone is not a non-empty string"),
+            ("a 41-character zone", zones_map(["a", "b" * 41]), None, "map zone is over 40 characters"),
+            (
+                "a reach item that is not a string",
+                {"reach": {"now": [3]}},
+                None,
+                "reach now item is not a non-empty string",
+            ),
+            (
+                "an empty afterFix item",
+                {"reach": {"now": ["Run code."], "afterFix": [""]}},
+                None,
+                "reach afterFix item is not a non-empty string",
+            ),
+            (
+                "a 121-character reach item",
+                {"reach": {"now": ["a" * 121]}},
+                None,
+                "reach now item is over 120 characters",
+            ),
+        ]
+
+        for name, visual, want, want_error in cases:
+            with self.subTest(name):
+                # given
+                given = json.loads(json.dumps(visual))
+
+                # when
+                if want_error is None:
+                    got = findings.check_visual(given)
+                else:
+                    with self.assertRaises(ValueError) as raised:
+                        findings.check_visual(given)
+
+                # then
+                if want_error is None:
+                    self.assertEqual(got, want)
+                else:
+                    self.assertEqual(str(raised.exception), want_error)
 
 
 class TestSkipKnown(unittest.TestCase):
@@ -343,6 +501,15 @@ class TestMain(unittest.TestCase):
                 None,
                 1,
                 "reading findings input: item 1: unknown chip scary\n",
+                None,
+            ),
+            (
+                "bad visual",
+                argv,
+                json.dumps([item(), item(visual={"path": [{"actor": "a stranger", "step": "Opens a PR."}]})]),
+                None,
+                1,
+                "reading findings input: item 2 visual: path is not a list of 2 to 6 steps\n",
                 None,
             ),
             (

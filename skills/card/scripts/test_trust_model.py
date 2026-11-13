@@ -115,6 +115,9 @@ def no_git(command, **kwargs):
 
 
 class Unfiltered:
+    def __init__(self, rel=MODEL):
+        self.rel = rel
+
     def __eq__(self, other):
         if not isinstance(other, str):
             return False
@@ -122,7 +125,7 @@ class Unfiltered:
         return (
             set(data) == {"optedIn", "warning"}
             and data["optedIn"] is False
-            and data["warning"].startswith(f"reading trust model: {MODEL}: ")
+            and data["warning"].startswith(f"reading trust model: {self.rel}: ")
             and data["warning"].endswith("; findings unfiltered")
         )
 
@@ -327,6 +330,15 @@ class TestMain(unittest.TestCase):
                 [write(MODEL, "assets: [\n")],
                 0,
                 Unfiltered(),
+                "",
+            ),
+            ("base with a model that fails the check", ["base", "BASE"], [model(empty("attackers"))], 0, Unfiltered(), ""),
+            (
+                "base with a security file that fails the check",
+                ["base", "BASE"],
+                [replace(SECURITY, "version: 1", "version: 2")],
+                0,
+                Unfiltered(SECURITY),
                 "",
             ),
             ("base without a sha", ["base"], [], 2, "", USAGE),

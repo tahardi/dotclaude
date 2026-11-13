@@ -109,6 +109,10 @@ def model_at(base: str) -> tuple[tuple[dict, dict] | None, str | None]:
     if model is None or security is None or not opted_in(model, security):
         return None, None
 
+    for rel, found in ((MODEL, model_problems(model)), (SECURITY, security_problems(security))):
+        if found:
+            return None, f"reading trust model: {rel}: {found[0]}; findings unfiltered"
+
     return (model, security), None
 
 

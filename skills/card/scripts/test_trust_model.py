@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import shutil
 import subprocess
 import tempfile
@@ -18,7 +19,8 @@ MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
 CODE = {"kind": "code", "class": "command-injection", "file": "api/run.go", "hash": "0123456789abcdef"}
 DEPENDENCY = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
-USAGE = "usage: trust_model.py check DIR\n"
+USAGE = "usage: trust_model.py check DIR | base SHA\n"
+REAL_RUN = subprocess.run
 MISSING = f"checking trust model: {MODEL} is missing\nchecking trust model: {SECURITY} is missing\n"
 
 
@@ -100,6 +102,28 @@ class Reading:
 
     def __repr__(self):
         return f"{self.prefix}<reason>"
+
+
+def slow_show(command, **kwargs):
+    if command[1] == "show":
+        raise subprocess.TimeoutExpired(command, 30)
+    return REAL_RUN(command, **kwargs)
+
+
+class Unfiltered:
+    def __eq__(self, other):
+        if not isinstance(other, str):
+            return False
+        data = json.loads(other)
+        return (
+            set(data) == {"optedIn", "warning"}
+            and data["optedIn"] is False
+            and data["warning"].startswith(f"reading trust model: {MODEL}: ")
+            and data["warning"].endswith("; findings unfiltered")
+        )
+
+    def __repr__(self):
+        return '{"optedIn": false, "warning": "reading trust model: ...; findings unfiltered"}'
 
 
 class TestProblems(unittest.TestCase):
@@ -284,6 +308,24 @@ class TestMain(unittest.TestCase):
             ("no problems", ["check", "DIR"], [], 0, "", ""),
             ("no arguments", [], [], 2, "", USAGE),
             ("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
+            ("base opted in", ["base", "BASE"], [], 0, '{"optedIn": true}\n', ""),
+            (
+                "base with enabled yes",
+                ["base", "BASE"],
+                [replace(SECURITY, "enabled: true", "enabled: yes")],
+                0,
+                '{"optedIn": false}\n',
+                "",
+            ),
+            (
+                "base with bad yaml",
+                ["base", "BASE"],
+                [write(MODEL, "assets: [\n")],
+                0,
+                Unfiltered(),
+                "",
+            ),
+            ("base without a sha", ["base"], [], 2, "", USAGE),
         ]
 
         for name, args, changes, code, out, err in cases:
@@ -293,11 +335,13 @@ class TestMain(unittest.TestCase):
                 copy_templates(repo)
                 for change in changes:
                     change(repo)
-                argv = ["trust_model.py", *[directory if arg == "DIR" else arg for arg in args]]
+                base = commit_files(directory, {})
+                argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
                 stdout, stderr = io.StringIO(), io.StringIO()
 
                 # when
                 with (
+                    contextlib.chdir(directory),
                     mock.patch("sys.argv", argv),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
@@ -345,19 +389,24 @@ class TestAtBase(unittest.TestCase):
             ("enabled yes stays text", {SECURITY: "enabled: yes\n"}, (None, {"enabled": "yes"}), None),
             ("bad model yaml", {MODEL: "assets: [\n"}, None, f"{MODEL}: "),
             ("security not a mapping", {SECURITY: "true\n"}, None, f"{SECURITY}: "),
+            ("unknown base commit", {}, None, "base commit "),
+            ("git show times out", {}, None, f"{MODEL}: git show timed"),
         ]
 
         for name, files, want, want_error in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 # given
                 base = commit_files(directory, files)
+                if name == "unknown base commit":
+                    base = "0" * 40
+                run = slow_show if name == "git show times out" else REAL_RUN
                 (Path(directory) / SECURITY).parent.mkdir(parents=True, exist_ok=True)
                 (Path(directory) / SECURITY).write_text("version: 1\nenabled: false\n")
                 got = None
                 error = None
 
                 # when
-                with contextlib.chdir(directory):
+                with contextlib.chdir(directory), mock.patch.object(trust_model.subprocess, "run", side_effect=run):
                     try:
                         got = trust_model.at_base(base)
                     except ValueError as raised:

@@ -260,18 +260,6 @@ def write(key: str, head: str, items: object, now: str, known: tuple[dict, dict]
     return result if known is None else {**result, "skipped": skipped}
 
 
-def model_at(base: str | None) -> tuple[tuple[dict, dict] | None, str | None]:
-    if base is None:
-        return None, None
-    try:
-        model, security = trust_model.at_base(base)
-    except ValueError as error:
-        return None, f"reading trust model: {error}; findings unfiltered"
-    if model is None or security is None or not trust_model.opted_in(model, security):
-        return None, None
-    return (model, security), None
-
-
 def main() -> None:
     args = sys.argv[1:]
     if len(args) not in (4, 6) or args[0] != "write" or args[2] != "--head" or not args[3]:
@@ -280,7 +268,7 @@ def main() -> None:
     if len(args) == 6 and (args[4] != "--base" or not args[5]):
         print(USAGE, file=sys.stderr)
         sys.exit(2)
-    known, warning = model_at(args[5] if len(args) == 6 else None)
+    known, warning = trust_model.model_at(args[5]) if len(args) == 6 else (None, None)
     try:
         items = json.load(sys.stdin)
     except ValueError:

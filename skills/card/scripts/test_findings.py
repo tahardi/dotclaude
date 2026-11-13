@@ -249,7 +249,7 @@ def security_with(**changes):
 
 class TestSkipKnown(unittest.TestCase):
     def test_skip_known(self):
-        dependency = {"kind": "dependency", "advisory": "GHSA-1", "package": "lodash"}
+        dependency = {**DEPENDENCY_IDENTITY}
         other_hash = {**CODE_IDENTITY, "hash": code_hash(OTHER_CODE)}
         cases = [
             (
@@ -562,28 +562,70 @@ class TestMain(unittest.TestCase):
 
         model_text = (TEMPLATES / "trust-model.yaml").read_text()
         security_text = (TEMPLATES / "security.yaml").read_text()
-        accepted = yaml.safe_dump({**yaml.safe_load(model_text), "accepted": [{"identity": CODE_IDENTITY}]})
+        model_data = yaml.safe_load(model_text)
+        accepted = yaml.safe_dump({**model_data, "accepted": [{"identity": CODE_IDENTITY}]})
+        raised = yaml.safe_dump({**model_data, "overrides": [{"identity": CODE_IDENTITY, "severity": "high"}]})
         two = json.dumps([item(), other_item()])
         base_cases = [
             (
                 "base opted in skips the accepted input",
                 {MODEL: accepted, SECURITY: security_text},
+                None,
+                two,
                 {"round": 1, "ids": ["F1"], "dropped": 0, "skipped": 1},
+                {"F1": "high"},
+            ),
+            (
+                "base opted in with nothing to skip prints skipped 0",
+                {MODEL: model_text, SECURITY: security_text},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0, "skipped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
+            (
+                "undecided finding accepted at the base is removed",
+                {MODEL: accepted, SECURITY: security_text},
+                old_file([stored("F1")]),
+                json.dumps([item()]),
+                {"round": 2, "ids": [], "dropped": 0, "skipped": 1},
+                {},
+            ),
+            (
+                "override at the base sets the written severity",
+                {MODEL: raised, SECURITY: security_text},
+                None,
+                json.dumps([item(severity="medium")]),
+                {"round": 1, "ids": ["F1"], "dropped": 0, "skipped": 0},
+                {"F1": "high"},
             ),
             (
                 "base with security off keeps everything",
                 {MODEL: accepted, SECURITY: security_text.replace("enabled: true", "enabled: false")},
+                None,
+                two,
                 {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
             ),
-            ("base without the files keeps everything", {}, {"round": 1, "ids": ["F1", "F2"], "dropped": 0}),
+            (
+                "base without the files keeps everything",
+                {},
+                None,
+                two,
+                {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
+            ),
             (
                 "bad yaml at the base keeps everything and warns",
                 {MODEL: "assets: [\n", SECURITY: security_text},
+                None,
+                two,
                 {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
+                {"F1": "high", "F2": "high"},
             ),
         ]
 
-        for name, files, want_output in base_cases:
+        for name, files, existing, stdin_text, want_output, want_severities in base_cases:
             with self.subTest(name):
                 # given
                 stdout = io.StringIO()
@@ -593,10 +635,14 @@ class TestMain(unittest.TestCase):
                 ):
                     base = commit_files(repo, files)
                     args = ["findings.py", "write", KEY, "--head", HEAD, "--base", base]
+                    path = os.path.join(folder, f"{KEY}.json")
+                    if existing is not None:
+                        with open(path, "w") as handle:
+                            json.dump(existing, handle)
 
                     # when
                     with contextlib.chdir(repo), mock.patch.object(sys, "argv", args), mock.patch.object(
-                        sys, "stdin", io.StringIO(two)
+                        sys, "stdin", io.StringIO(stdin_text)
                     ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                         findings.main()
 
@@ -605,6 +651,9 @@ class TestMain(unittest.TestCase):
                     warning = got.pop("warning", None)
                     self.assertEqual(got, want_output)
                     self.assertEqual(stderr.getvalue(), "")
+                    with open(path) as handle:
+                        written = json.load(handle)["findings"]
+                    self.assertEqual({finding["id"]: finding["severity"] for finding in written}, want_severities)
                     if name.endswith("warns"):
                         self.assertRegex(warning, rf"\Areading trust model: {MODEL}: .+; findings unfiltered\Z")
                     else:

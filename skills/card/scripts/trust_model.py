@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -32,7 +33,7 @@ BUILD_FIELDS = ["built", "deployed", "monitored"]
 SEVERITIES = ("high", "medium", "low")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
 HASH = re.compile(r"\A[0-9a-f]{16}\Z")
-USAGE = "usage: trust_model.py check DIR | base SHA | apply KEY | diff KEY --base SHA"
+USAGE = "usage: trust_model.py check DIR | base SHA | track DIR | apply KEY | diff KEY --base SHA"
 MODEL_CLASSES = ("trust-model-change", "trust-model-update")
 ACCEPTED_HEADING = "## Accepted Risks"
 OVERRIDES_HEADING = "## Severity Overrides"
@@ -283,6 +284,83 @@ def problems(repo: Path) -> list[str]:
     return [f"checking trust model: {problem}" for problem in found]
 
 
+def merged(inputs: list[dict]) -> dict[str, dict]:
+    combined: dict[str, dict] = {}
+
+    for finding in (finding for finding in inputs if finding["severity"] != "low"):
+        key = findings.identity_key(finding["identity"])
+        first = combined.setdefault(key, finding)
+
+        if finding["severity"] == "high":
+            first["severity"] = "high"
+
+    return combined
+
+
+def save(path: Path, text: str) -> None:
+    temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+
+    try:
+        temp.write_text(text)
+        os.replace(temp, path)
+    except OSError as error:
+        raise ValueError(f"writing trust model: {SECURITY}: {error.strerror or error}") from error
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def track(repo: Path, inputs: list[dict]) -> list[dict]:
+    path = repo / SECURITY
+
+    if not path.is_file():
+        raise ValueError(f"reading trust model: {SECURITY} is missing")
+
+    try:
+        security = read_security(path.read_text())
+    except (yaml.YAMLError, ValueError) as error:
+        raise ValueError(f"reading trust model: {SECURITY}: {' '.join(str(error).split())}") from error
+
+    try:
+        incoming = findings.parse(inputs)
+    except ValueError as error:
+        raise ValueError(f"reading findings input: {error}") from error
+
+    known = findings.known_keys(security, "tracked")
+    new = [finding for key, finding in merged(incoming).items() if key not in known]
+    lines = entries(security, "tracked") + [
+        {"identity": finding["identity"], "title": one_line(finding["title"]), "card": None} for finding in new
+    ]
+    rest = yaml.safe_dump({key: value for key, value in security.items() if key != "tracked"}, sort_keys=False)
+    save(path, rest + "tracked:\n" + "".join(f"{entry_line(line)}\n" for line in lines))
+
+    return [
+        {
+            "title": one_line(finding["title"]),
+            "severity": finding["severity"],
+            "file": one_line(finding["identity"].get("file") or finding["identity"].get("package")),
+            "line": finding["line"],
+            **{name: one_line(finding[name]) for name in findings.PROSE},
+        }
+        for finding in new
+    ]
+
+
+def run_track(repo: Path) -> None:
+    try:
+        inputs = json.load(sys.stdin)
+    except ValueError:
+        print("reading findings input: not valid JSON", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        print(json.dumps(track(repo, inputs)))
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
+
+    sys.exit(0)
+
+
 def entry_line(entry: dict) -> str:
     return f"  - {json.dumps(entry)}"
 
@@ -468,8 +546,11 @@ def main() -> None:
             sys.exit(1)
         sys.exit(0)
 
-    if len(args) != 2 or args[0] not in ("check", "base"):
+    if len(args) != 2 or args[0] not in ("check", "base", "track"):
         usage()
+
+    if args[0] == "track":
+        run_track(Path(args[1]))
 
     if args[0] == "base":
         known, warning = model_at(args[1])

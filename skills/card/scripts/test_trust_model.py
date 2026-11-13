@@ -21,7 +21,7 @@ MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
 CODE = {"kind": "code", "class": "command-injection", "file": "api/run.go", "hash": "0123456789abcdef"}
 DEPENDENCY = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
-USAGE = "usage: trust_model.py check DIR | base SHA | track DIR\n"
+USAGE = "usage: trust_model.py check DIR | base SHA | track DIR | apply KEY | diff KEY --base SHA\n"
 REAL_RUN = subprocess.run
 MISSING = f"checking trust model: {MODEL} is missing\nchecking trust model: {SECURITY} is missing\n"
 
@@ -316,15 +316,22 @@ class TestProblems(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
+def main_case(name, args, before, code, out, err, after=(), stored=None):
+    return name, args, before, list(after), stored, code, out, err
+
+
 class TestMain(unittest.TestCase):
     def test_main(self):
+        decided = json.dumps(findings_file(ACCEPTED))
+        no_model = [remove(MD), remove(MODEL), remove(SECURITY)]
+        diff = ["diff", "MPL-340", "--base", "BASE"]
         cases = [
-            ("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, MISSING, ""),
-            ("no problems", ["check", "DIR"], [], 0, "", ""),
-            ("no arguments", [], [], 2, "", USAGE),
-            ("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
-            ("base opted in", ["base", "BASE"], [], 0, '{"optedIn": true}\n', ""),
-            (
+            main_case("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, MISSING, ""),
+            main_case("no problems", ["check", "DIR"], [], 0, "", ""),
+            main_case("no arguments", [], [], 2, "", USAGE),
+            main_case("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
+            main_case("base opted in", ["base", "BASE"], [], 0, '{"optedIn": true}\n', ""),
+            main_case(
                 "base with enabled yes",
                 ["base", "BASE"],
                 [replace(SECURITY, "enabled: true", "enabled: yes")],
@@ -332,16 +339,16 @@ class TestMain(unittest.TestCase):
                 '{"optedIn": false}\n',
                 "",
             ),
-            (
-                "base with bad yaml",
+            main_case("base with bad yaml", ["base", "BASE"], [write(MODEL, "assets: [\n")], 0, Unfiltered(), ""),
+            main_case(
+                "base with a model that fails the check",
                 ["base", "BASE"],
-                [write(MODEL, "assets: [\n")],
+                [model(empty("attackers"))],
                 0,
                 Unfiltered(),
                 "",
             ),
-            ("base with a model that fails the check", ["base", "BASE"], [model(empty("attackers"))], 0, Unfiltered(), ""),
-            (
+            main_case(
                 "base with a security file that fails the check",
                 ["base", "BASE"],
                 [replace(SECURITY, "version: 1", "version: 2")],
@@ -349,23 +356,81 @@ class TestMain(unittest.TestCase):
                 Unfiltered(SECURITY),
                 "",
             ),
-            ("base without a sha", ["base"], [], 2, "", USAGE),
+            main_case("base without a sha", ["base"], [], 2, "", USAGE),
+            main_case("diff with no model at base", diff, no_model, 0, "[]\n", "", after=[copy_templates]),
+            main_case(
+                "diff of a hand edit to attackers",
+                diff,
+                [],
+                0,
+                json.dumps([{"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]}])
+                + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+            ),
+            main_case(
+                "diff of a hand edit to a model marked binary",
+                diff,
+                [write(".gitattributes", "*.yaml binary\n*.yaml -diff\n")],
+                0,
+                json.dumps([{"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]}])
+                + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+            ),
+            main_case(
+                "diff after apply",
+                diff,
+                [],
+                0,
+                "[]\n",
+                "",
+                after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
+                stored=decided,
+            ),
+            main_case(
+                "diff with an unreadable findings file",
+                diff,
+                [],
+                1,
+                "",
+                "reading findings: MPL-340.json: not valid JSON\n",
+                stored="{",
+            ),
+            main_case(
+                "diff with an unknown base",
+                ["diff", "MPL-340", "--base", "0" * 40],
+                [],
+                1,
+                "",
+                f"base commit {'0' * 40} is not in this repo\n",
+            ),
+            main_case("diff with a bad card key", ["diff", "nope", "--base", "BASE"], [], 2, "", USAGE),
+            main_case("diff without a base", ["diff", "MPL-340"], [], 2, "", USAGE),
+            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided),
+            main_case("apply with no findings file", ["apply", "MPL-340"], [], 0, '{"added": 0}\n', ""),
+            main_case("apply with a bad card key", ["apply", "mpl"], [], 2, "", USAGE),
         ]
 
-        for name, args, changes, code, out, err in cases:
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+        for name, args, before, after, stored, code, out, err in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as store:
                 # given
                 repo = Path(directory)
                 copy_templates(repo)
-                for change in changes:
+                for change in before:
                     change(repo)
                 base = commit_files(directory, {})
+                for change in after:
+                    change(repo)
+                if stored is not None:
+                    (Path(store) / "MPL-340.json").write_text(stored)
                 argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
                 stdout, stderr = io.StringIO(), io.StringIO()
 
                 # when
                 with (
                     contextlib.chdir(directory),
+                    mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": store}),
                     mock.patch("sys.argv", argv),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
@@ -674,6 +739,262 @@ class TestTrack(unittest.TestCase):
                     self.assertEqual((repo / SECURITY).read_text(), after)
                     names = sorted(path.name for path in (repo / SECURITY).parent.iterdir())
                     self.assertEqual(names, ["security.yaml"])
+
+
+DECIDED_AT = "2026-11-11T18:00:00+00:00"
+ACCEPTED_LINE = (
+    '  - {"identity": {"kind": "code", "class": "command-injection", "file": "api/run.go", '
+    '"hash": "0123456789abcdef"}, '
+    '"title": "Branch names reach a shell", "reason": "local only", "card": "MPL-340", "finding": "F1", '
+    '"at": "2026-11-11"}'
+)
+ACCEPTED_BULLET = "- Branch names reach a shell (MPL-340 F1): local only"
+OVERRIDE_LINE = (
+    '  - {"identity": {"kind": "code", "class": "command-injection", "file": "api/run.go", '
+    '"hash": "0123456789abcdef"}, '
+    '"severity": "low", "title": "Branch names reach a shell", "card": "MPL-340", "finding": "F1", "at": "2026-11-11"}'
+)
+OVERRIDE_BULLET = "- Branch names reach a shell (MPL-340 F1): low"
+TRACKED_LINE = (
+    '  - {"identity": {"kind": "code", "class": "command-injection", "file": "api/run.go", '
+    '"hash": "0123456789abcdef"}, '
+    '"title": "Branch names reach a shell", "card": "MPL-400"}'
+)
+ACCEPTED_KEY = f"{MODEL}:accepted"
+OVERRIDES_KEY = f"{MODEL}:overrides"
+TRACKED_KEY = f"{SECURITY}:tracked"
+ACCEPTED_HEADING = f"{MD}:## Accepted Risks"
+OVERRIDES_HEADING = f"{MD}:## Severity Overrides"
+
+
+def decision(kind, reason=None):
+    return {"kind": kind, "reason": reason, "decidedAt": DECIDED_AT}
+
+
+def finding(**changes):
+    base = {
+        "id": "F1",
+        "identity": CODE,
+        "title": "Branch names reach a shell",
+        "severity": "high",
+        "applied": None,
+        "decision": None,
+        "severityOverride": None,
+    }
+    return {**base, **changes}
+
+
+def findings_file(*found):
+    return {"version": 1, "round": 1, "card": "MPL-340", "findings": list(found)}
+
+
+ACCEPTED = finding(decision=decision("accept-risk", "local only"))
+OVERRIDDEN = finding(decision=decision("fix-now"), severityOverride="low")
+TRACKED = finding(
+    decision=decision("fix-later"),
+    applied={"at": DECIDED_AT, "commit": None, "cardKey": "MPL-400"},
+)
+
+
+class TestEntryLines(unittest.TestCase):
+    def test_entry_lines(self):
+        model_class = {**CODE, "class": "trust-model-change"}
+        update_class = {**CODE, "class": "trust-model-update"}
+        cases = [
+            ("accept risk", ACCEPTED, {ACCEPTED_KEY: [ACCEPTED_LINE], ACCEPTED_HEADING: [ACCEPTED_BULLET]}),
+            ("severity override", OVERRIDDEN, {OVERRIDES_KEY: [OVERRIDE_LINE], OVERRIDES_HEADING: [OVERRIDE_BULLET]}),
+            ("fix later with a card", TRACKED, {TRACKED_KEY: [TRACKED_LINE]}),
+            ("fix later without a card", finding(decision=decision("fix-later")), {}),
+            ("undecided", finding(severityOverride="low"), {}),
+            ("not real", finding(decision=decision("not-real", "test code")), {}),
+            ("fix now", finding(decision=decision("fix-now")), {}),
+            (
+                "accept risk with a multi-line reason",
+                finding(decision=decision("accept-risk", "local\n only")),
+                {
+                    ACCEPTED_KEY: [ACCEPTED_LINE.replace("local only", "local\\n only")],
+                    ACCEPTED_HEADING: [ACCEPTED_BULLET],
+                },
+            ),
+            (
+                "accept risk without a reason",
+                finding(decision=decision("accept-risk")),
+                {
+                    ACCEPTED_KEY: [ACCEPTED_LINE.replace('"local only"', "null")],
+                    ACCEPTED_HEADING: [ACCEPTED_BULLET.replace("local only", "none")],
+                },
+            ),
+            (
+                "multi-line title",
+                finding(title="Branch names\n reach a shell", decision=decision("accept-risk", "local only")),
+                {
+                    ACCEPTED_KEY: [ACCEPTED_LINE.replace("Branch names reach", "Branch names\\n reach")],
+                    ACCEPTED_HEADING: [ACCEPTED_BULLET],
+                },
+            ),
+            (
+                "multi-line title overridden",
+                finding(title="Branch names\n reach a shell", decision=decision("fix-now"), severityOverride="low"),
+                {
+                    OVERRIDES_KEY: [OVERRIDE_LINE.replace("Branch names reach", "Branch names\\n reach")],
+                    OVERRIDES_HEADING: [OVERRIDE_BULLET],
+                },
+            ),
+            ("model change accepted", finding(identity=model_class, decision=decision("accept-risk", "ok")), {}),
+            (
+                "model update overridden",
+                finding(identity=update_class, decision=decision("fix-now"), severityOverride="low"),
+                {},
+            ),
+        ]
+
+        for name, found, want in cases:
+            with self.subTest(name):
+                # given
+                data = findings_file(found)
+
+                # when
+                got = trust_model.entry_lines(data)
+
+                # then
+                self.assertEqual(got, want)
+
+
+class TestApply(unittest.TestCase):
+    def test_apply(self):
+        all_three = findings_file(ACCEPTED, {**OVERRIDDEN, "id": "F2"}, {**TRACKED, "id": "F3"})
+        cases = [
+            (
+                "lines land under their key and heading",
+                [],
+                1,
+                all_three,
+                5,
+                {
+                    MODEL: [f"accepted:\n{ACCEPTED_LINE}\noverrides:\n{OVERRIDE_LINE.replace('F1', 'F2')}\n"],
+                    SECURITY: [f"tracked:\n{TRACKED_LINE}\n"],
+                    MD: [
+                        f"## Accepted Risks\n\nNone yet.\n{ACCEPTED_BULLET}\n\n## Severity Overrides",
+                        f"## Severity Overrides\n\nNone yet.\n{OVERRIDE_BULLET.replace('F1', 'F2')}\n",
+                    ],
+                },
+            ),
+            ("a second run adds nothing", [], 2, all_three, 0, {MODEL: [ACCEPTED_LINE]}),
+            ("no model writes nothing", [remove(MODEL)], 1, all_three, 0, {}),
+            ("nothing decided", [], 1, findings_file(finding()), 0, {}),
+            (
+                "an empty inline list becomes a block list",
+                [replace(MODEL, "accepted:\n", "accepted: []\n")],
+                1,
+                findings_file(ACCEPTED),
+                2,
+                {MODEL: [f"accepted:\n{ACCEPTED_LINE}\noverrides:\n"]},
+            ),
+            (
+                "a filled inline list stops with an error",
+                [replace(MODEL, "accepted:\n", 'accepted: [{"title": "kept"}]\n')],
+                1,
+                findings_file(ACCEPTED),
+                f"writing trust model: {MODEL}: accepted is an inline list",
+                {},
+            ),
+            (
+                "an error writes no file",
+                [replace(MODEL, "overrides:\n", 'overrides: [{"title": "kept"}]\n')],
+                1,
+                all_three,
+                f"writing trust model: {MODEL}: overrides is an inline list",
+                {},
+            ),
+            (
+                "new lines go after existing entries",
+                [lambda repo: trust_model.apply(repo, findings_file(ACCEPTED))],
+                1,
+                findings_file({**ACCEPTED, "id": "F5"}),
+                2,
+                {
+                    MODEL: [f"accepted:\n{ACCEPTED_LINE}\n{ACCEPTED_LINE.replace('F1', 'F5')}\noverrides:\n"],
+                    MD: [
+                        f"None yet.\n{ACCEPTED_BULLET}\n{ACCEPTED_BULLET.replace('F1', 'F5')}\n\n## Severity Overrides",
+                    ],
+                },
+            ),
+        ]
+
+        for name, changes, runs, data, want, contains in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                # given
+                repo = Path(directory)
+                copy_templates(repo)
+                for change in changes:
+                    change(repo)
+                for _ in range(runs - 1):
+                    trust_model.apply(repo, data)
+                before = {rel: (repo / rel).read_text() for rel in (MD, MODEL, SECURITY) if (repo / rel).exists()}
+
+                # when
+                try:
+                    got = trust_model.apply(repo, data)
+                except ValueError as error:
+                    got = str(error)
+
+                # then
+                self.assertEqual(got, want)
+                after = {rel: (repo / rel).read_text() for rel in before}
+                for rel, parts in contains.items():
+                    for part in parts:
+                        self.assertIn(part, after[rel])
+                if want == 0 or isinstance(want, str):
+                    self.assertEqual(after, before)
+                if (repo / MODEL).exists() and not isinstance(want, str):
+                    self.assertEqual(problems(repo), [])
+
+
+DIFF_HEADER = f"diff --git a/{MODEL} b/{MODEL}\nindex 1111111..2222222 100644\n--- a/{MODEL}\n+++ b/{MODEL}\n"
+
+
+class TestUnexplained(unittest.TestCase):
+    def test_unexplained(self):
+        cases = [
+            ("an expected added line is left out", f"{DIFF_HEADER}@@ -30,0 +31 @@ accepted:\n+{ACCEPTED_LINE}\n", []),
+            (
+                "a removed line is kept",
+                f"{DIFF_HEADER}@@ -20 +19,0 @@ attackers:\n-    reaches: [ci]\n",
+                [{"file": MODEL, "lines": ["-    reaches: [ci]"]}],
+            ),
+            (
+                "another added line is kept",
+                f"{DIFF_HEADER}@@ -30,0 +31,2 @@ accepted:\n+{ACCEPTED_LINE}\n+  - {{\"title\": \"x\"}}\n",
+                [{"file": MODEL, "lines": ['+  - {"title": "x"}']}],
+            ),
+            (
+                "a removed line that looks like a header is kept",
+                f"{DIFF_HEADER}@@ -40 +39,0 @@\n--- a/x\n",
+                [{"file": MODEL, "lines": ["--- a/x"]}],
+            ),
+            (
+                "other files are ignored",
+                "diff --git a/api/run.go b/api/run.go\n--- a/api/run.go\n+++ b/api/run.go\n@@ -1 +1 @@\n-a\n+b\n",
+                [],
+            ),
+            (
+                "a deleted model file is kept",
+                f"diff --git a/{SECURITY} b/{SECURITY}\ndeleted file mode 100644\n--- a/{SECURITY}\n+++ /dev/null\n"
+                "@@ -1,2 +0,0 @@\n-version: 1\n-enabled: true\n",
+                [{"file": SECURITY, "lines": ["-version: 1", "-enabled: true"]}],
+            ),
+        ]
+
+        for name, diff_text, want in cases:
+            with self.subTest(name):
+                # given
+                expected = {ACCEPTED_LINE}
+
+                # when
+                got = trust_model.unexplained(diff_text, expected)
+
+                # then
+                self.assertEqual(got, want)
 
 
 if __name__ == "__main__":

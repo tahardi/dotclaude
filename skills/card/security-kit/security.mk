@@ -6,7 +6,8 @@ govulncheck_version = v1.9.0
 
 security_results = security-results
 
-online = curl --silent --head --max-time 5 --output /dev/null $(1) || { echo "warning: skipping $(2): cannot reach $(1)"; exit 0; }
+online = curl --silent --head --max-time 5 --output /dev/null $(1) \
+	|| { echo "warning: skipping $(2): cannot reach $(1)"; exit 0; }
 
 security_deps = security-deps-osv-scanner
 ifneq ($(wildcard go.mod),)
@@ -76,30 +77,36 @@ $(security_results):
 .PHONY: security-deps-osv-scanner
 security-deps-osv-scanner: | $(security_results)
 	@$(call online,https://api.osv.dev,osv-scanner); \
+	code=0; \
 	go run github.com/google/osv-scanner/v2/cmd/osv-scanner@$(osv_scanner_version) scan source \
 		--recursive \
 		--allow-no-lockfiles \
 		--format json \
 		--output-file $(security_results)/osv-scanner.json \
 		. \
-		|| true; \
+		|| code=$$?; \
+	[ $$code -le 1 ] || echo "warning: osv-scanner failed: exit $$code"; \
 	echo "osv-scanner results: $(security_results)/osv-scanner.json"
 
 .PHONY: security-deps-govulncheck
 security-deps-govulncheck: | $(security_results)
 	@$(call online,https://vuln.go.dev,govulncheck); \
+	code=0; \
 	go run golang.org/x/vuln/cmd/govulncheck@$(govulncheck_version) \
 		-format json \
 		./... \
 		> $(security_results)/govulncheck.json \
-		|| true; \
+		|| code=$$?; \
+	[ $$code -eq 0 ] || echo "warning: govulncheck failed: exit $$code"; \
 	echo "govulncheck results: $(security_results)/govulncheck.json"
 
 .PHONY: security-deps-npm-audit
 security-deps-npm-audit: | $(security_results)
 	@$(call online,https://registry.npmjs.org,npm audit); \
+	code=0; \
 	npm audit \
 		--json \
 		> $(security_results)/npm-audit.json \
-		|| true; \
+		|| code=$$?; \
+	[ $$code -le 1 ] || echo "warning: npm audit failed: exit $$code"; \
 	echo "npm audit results: $(security_results)/npm-audit.json"

@@ -68,15 +68,13 @@ def identity_of(value: object) -> dict:
     raise ValueError("identity kind is not code or dependency")
 
 
-def finding_of(value: object) -> dict | None:
+def finding_of(value: object) -> dict:
     if not isinstance(value, dict):
         raise ValueError("not an object")
     for name in REQUIRED:
         if name not in value:
             raise ValueError(f"missing {name}")
     severity = value["severity"]
-    if severity == "low":
-        return None
     line = value["line"]
     if line is not None and (not isinstance(line, int) or isinstance(line, bool) or line < 1):
         raise ValueError("line is not a positive number or null")
@@ -95,7 +93,7 @@ def finding_of(value: object) -> dict | None:
     return {
         "identity": identity_of(value["identity"]),
         "line": line,
-        "severity": severity if severity in ("high", "medium") else "high",
+        "severity": severity if severity in trust_model.SEVERITIES else "high",
         "sources": list(dict.fromkeys(sources)),
         "title": text(value["title"], "title", 120),
         **{name: text(value[name], name, 600) for name in PROSE},
@@ -103,21 +101,16 @@ def finding_of(value: object) -> dict | None:
     }
 
 
-def parse(items: object) -> tuple[list, int]:
+def parse(items: object) -> list:
     if not isinstance(items, list):
         raise ValueError("expected a JSON array")
     parsed = []
-    dropped = 0
     for number, value in enumerate(items, start=1):
         try:
-            finding = finding_of(value)
+            parsed.append(finding_of(value))
         except ValueError as error:
             raise ValueError(f"item {number}: {error}") from error
-        if finding is None:
-            dropped += 1
-        else:
-            parsed.append(finding)
-    return parsed, dropped
+    return parsed
 
 
 def identity_key(identity: dict) -> str:
@@ -228,9 +221,8 @@ def skip_known(findings: list[dict], model: dict, security: dict) -> tuple[list[
     kept = []
     for finding in findings:
         key = identity_key(finding["identity"])
-        severity = overrides.get(key, finding["severity"])
-        if key not in known and severity != "low":
-            kept.append({**finding, "severity": severity})
+        if key not in known and overrides.get(key) != "low":
+            kept.append({**finding, "severity": overrides.get(key, finding["severity"])})
     return kept, len(findings) - len(kept)
 
 
@@ -238,12 +230,15 @@ def write(key: str, head: str, items: object, now: str, known: tuple[dict, dict]
     if not KEY.match(key):
         raise ValueError(f"reading findings input: bad card key {key}")
     try:
-        incoming, dropped = parse(items)
+        incoming = parse(items)
     except ValueError as error:
         raise ValueError(f"reading findings input: {error}") from error
     skipped = 0
     if known is not None:
         incoming, skipped = skip_known(incoming, *known)
+    kept = [finding for finding in incoming if finding["severity"] != "low"]
+    dropped = len(incoming) - len(kept)
+    incoming = kept
     path = findings_path(key)
     merged = {**merge(read_existing(path), incoming, head, now), "card": key}
     temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")

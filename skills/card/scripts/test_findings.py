@@ -235,8 +235,7 @@ class TestWrite(unittest.TestCase):
 
 
 def parsed(**changes):
-    found, _ = findings.parse([item(**changes)])
-    return found[0]
+    return findings.parse([item(**changes)])[0]
 
 
 def model_with(**changes):
@@ -275,6 +274,14 @@ class TestSkipKnown(unittest.TestCase):
                 security_with(tracked=[{"identity": DEPENDENCY_IDENTITY, "card": None}]),
                 [parsed()],
                 1,
+            ),
+            (
+                "override raises a low input to medium",
+                [parsed(severity="low")],
+                model_with(overrides=[{"identity": CODE_IDENTITY, "severity": "medium"}]),
+                security_with(),
+                [parsed(severity="medium")],
+                0,
             ),
             (
                 "override turns medium into high",
@@ -565,6 +572,7 @@ class TestMain(unittest.TestCase):
         model_data = yaml.safe_load(model_text)
         accepted = yaml.safe_dump({**model_data, "accepted": [{"identity": CODE_IDENTITY}]})
         raised = yaml.safe_dump({**model_data, "overrides": [{"identity": CODE_IDENTITY, "severity": "high"}]})
+        lifted = yaml.safe_dump({**model_data, "overrides": [{"identity": CODE_IDENTITY, "severity": "medium"}]})
         two = json.dumps([item(), other_item()])
         base_cases = [
             (
@@ -598,6 +606,14 @@ class TestMain(unittest.TestCase):
                 json.dumps([item(severity="medium")]),
                 {"round": 1, "ids": ["F1"], "dropped": 0, "skipped": 0},
                 {"F1": "high"},
+            ),
+            (
+                "override at the base raises a low input",
+                {MODEL: lifted, SECURITY: security_text},
+                None,
+                json.dumps([item(severity="low"), other_item(severity="low")]),
+                {"round": 1, "ids": ["F1"], "dropped": 1, "skipped": 0},
+                {"F1": "medium"},
             ),
             (
                 "base with security off keeps everything",

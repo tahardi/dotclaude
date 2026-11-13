@@ -263,10 +263,11 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
    `python3 ~/.claude/skills/card/scripts/findings.py write KEY --head "$(git rev-parse HEAD)" --base <base> < <file>`
    from the worktree, as it reads the trust model with `git show` there. It drops `low` findings, merges repeats, keeps
    Taylor's decisions, and prints `{"round", "ids", "dropped"}`, where `ids` are the findings that need Taylor. When
-   the base is opted in, it also skips findings the model accepts or tracks, applies its severity overrides, and adds
-   `"skipped"`. When the base model cannot be read, it writes every finding unfiltered and adds `"warning"`: report
-   that warning at "Finish". If it exits 1 with `reading findings input:`, fix the data it names and run it again. On
-   any other failure, tell the user what it printed and carry on: the pass never blocks.
+   the base is opted in, it first skips findings the model accepts or tracks and applies its severity overrides, so an
+   override can raise a `low` finding, and adds `"skipped"`. When the base model cannot be read, it writes every
+   finding unfiltered and adds `"warning"`: report that warning at "Finish". If it exits 1 with
+   `reading findings input:`, fix the data it names and run it again. On any other failure, tell the user what it
+   printed and carry on: the pass never blocks.
 7. Run `gh pr edit` to add a "Tests" bullet for each test these fixes added, and to update the deviations and the card
    impacts, as in Agent Review step 10. Leave that step's `Agent review:` line as Agent Review set it; these fixes are
    not Agent Review findings.

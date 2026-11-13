@@ -370,21 +370,24 @@ def apply(repo: Path, file: dict) -> int:
         return 0
 
     added = 0
+    texts: dict[str, str] = {}
 
     for key, new in entry_lines(file).items():
         rel, section = key.split(":", 1)
-        path = repo / rel
 
-        if not path.is_file():
+        if rel not in texts and not (repo / rel).is_file():
             continue
 
-        text = path.read_text()
+        text = texts.get(rel) or (repo / rel).read_text()
         present = set(text.splitlines())
         missing = [line for line in dict.fromkeys(new) if line not in present]
 
         if missing:
-            path.write_text(insert(rel, text, section, missing, rel == MD))
+            texts[rel] = insert(rel, text, section, missing, rel == MD)
             added += len(missing)
+
+    for rel, text in texts.items():
+        (repo / rel).write_text(text)
 
     return added
 

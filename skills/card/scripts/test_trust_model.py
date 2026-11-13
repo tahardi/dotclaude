@@ -661,6 +661,14 @@ class TestApply(unittest.TestCase):
                 {},
             ),
             (
+                "an error writes no file",
+                [replace(MODEL, "overrides:\n", 'overrides: [{"title": "kept"}]\n')],
+                1,
+                all_three,
+                f"writing trust model: {MODEL}: overrides is an inline list",
+                {},
+            ),
+            (
                 "new lines go after existing entries",
                 [lambda repo: trust_model.apply(repo, findings_file(ACCEPTED))],
                 1,

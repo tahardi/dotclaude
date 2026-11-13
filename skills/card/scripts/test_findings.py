@@ -27,7 +27,7 @@ FIX_NOW = {"kind": "fix-now", "reason": None, "decidedAt": EARLIER}
 APPLIED = {"at": EARLIER, "commit": "c" * 40, "cardKey": None}
 LESSON = {"note": "Learning/Security/command-injection.md", "mode": "later", "at": EARLIER}
 RESUME = {"round": 1, "sentAt": EARLIER}
-USAGE = "usage: findings.py write KEY --head SHA [--base SHA]\n"
+USAGE = "usage: findings.py write KEY --head SHA [--base SHA] | read KEY | applied KEY ID [--commit SHA] [--card KEY]\n"
 TEMPLATES = Path(__file__).parent.parent / "trust-model"
 MODEL = ".maple/trust-model.yaml"
 SECURITY = ".maple/security.yaml"
@@ -674,6 +674,216 @@ class TestMain(unittest.TestCase):
                         self.assertRegex(warning, rf"\Areading trust model: {MODEL}: .+; findings unfiltered\Z")
                     else:
                         self.assertIsNone(warning)
+
+
+def run_main(args, existing):
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    code = 0
+    with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": folder}):
+        path = os.path.join(folder, f"{KEY}.json")
+        if existing is not None:
+            with open(path, "w") as handle:
+                handle.write(existing if isinstance(existing, str) else json.dumps(existing))
+        with mock.patch.object(sys, "argv", ["findings.py", *args]), mock.patch.object(
+            findings, "now", return_value=NOW
+        ):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                try:
+                    findings.main()
+                except SystemExit as exit_error:
+                    code = exit_error.code
+        saved = None
+        if os.path.exists(path):
+            with open(path) as handle:
+                raw = handle.read()
+            saved = raw if isinstance(existing, str) else json.loads(raw)
+        leftovers = [entry for entry in os.listdir(folder) if entry.endswith(".tmp")]
+    return code, stdout.getvalue(), stderr.getvalue(), saved, leftovers
+
+
+class TestRead(unittest.TestCase):
+    def test_read(self):
+        fix_later = {"kind": "fix-later", "reason": None, "decidedAt": EARLIER}
+        cases = [
+            ("missing file prints an empty list", None, []),
+            ("file with no findings prints an empty list", file(1, []), []),
+            (
+                "lists decided unapplied findings only",
+                file(
+                    2,
+                    [
+                        stored("F1"),
+                        stored("F2", decision=FIX_NOW, applied=APPLIED),
+                        other_stored("F3", decision=fix_later),
+                    ],
+                ),
+                [other_stored("F3", decision=fix_later)],
+            ),
+            (
+                "override replaces the severity",
+                file(1, [stored("F1", decision=DECIDED, severityOverride="medium", lesson=LESSON)]),
+                [stored("F1", decision=DECIDED, severity="medium", severityOverride="medium", lesson=LESSON)],
+            ),
+            (
+                "override can lower to low",
+                file(1, [stored("F1", decision=FIX_NOW, severityOverride="low")]),
+                [stored("F1", decision=FIX_NOW, severity="low", severityOverride="low")],
+            ),
+        ]
+
+        for name, existing, want in cases:
+            with self.subTest(name):
+                # given
+                args = ["read", KEY]
+
+                # when
+                code, stdout, stderr, _, _ = run_main(args, existing)
+
+                # then
+                self.assertEqual((code, stderr), (0, ""))
+                self.assertEqual(json.loads(stdout), want)
+
+    def test_read_errors(self):
+        newer = {**file(1, []), "version": 2}
+        cases = [
+            ("damaged file", ["read", KEY], "{", 1, f"reading findings: {KEY}.json: not valid JSON\n"),
+            ("newer file", ["read", KEY], newer, 1, f"reading findings: {KEY}.json is from a newer version\n"),
+            ("bad card key", ["read", "mpl-1"], None, 2, USAGE),
+            ("extra argument", ["read", KEY, "F1"], None, 2, USAGE),
+        ]
+
+        for name, args, existing, want_code, want_stderr in cases:
+            with self.subTest(name):
+                # given
+                given = existing
+
+                # when
+                code, stdout, stderr, _, _ = run_main(args, given)
+
+                # then
+                self.assertEqual((code, stdout, stderr), (want_code, "", want_stderr))
+
+
+def stamp(commit, card):
+    return {"at": NOW, "commit": commit, "cardKey": card}
+
+
+class TestApplied(unittest.TestCase):
+    def test_applied(self):
+        fix_later = {"kind": "fix-later", "reason": None, "decidedAt": EARLIER}
+        maple = {"severityOverride": "medium", "lesson": LESSON, "visual": {"kind": "flow"}}
+        existing = file(
+            2,
+            [stored("F1", decision=FIX_NOW, **maple), other_stored("F2", decision=fix_later), stored("F3")],
+            resume=RESUME,
+        )
+        cases = [
+            (
+                "stamps a commit and keeps Maple's fields",
+                ["applied", KEY, "F1", "--commit", "abc1234"],
+                0,
+                "",
+                file(
+                    2,
+                    [
+                        stored("F1", decision=FIX_NOW, applied=stamp("abc1234", None), **maple),
+                        other_stored("F2", decision=fix_later),
+                        stored("F3"),
+                    ],
+                    resume=RESUME,
+                ),
+            ),
+            (
+                "stamps a card key",
+                ["applied", KEY, "F2", "--card", "MPL-400"],
+                0,
+                "",
+                file(
+                    2,
+                    [
+                        stored("F1", decision=FIX_NOW, **maple),
+                        other_stored("F2", decision=fix_later, applied=stamp(None, "MPL-400")),
+                        stored("F3"),
+                    ],
+                    resume=RESUME,
+                ),
+            ),
+            (
+                "stamps with neither",
+                ["applied", KEY, "F2"],
+                0,
+                "",
+                file(
+                    2,
+                    [
+                        stored("F1", decision=FIX_NOW, **maple),
+                        other_stored("F2", decision=fix_later, applied=stamp(None, None)),
+                        stored("F3"),
+                    ],
+                    resume=RESUME,
+                ),
+            ),
+            (
+                "unknown id",
+                ["applied", KEY, "F9", "--commit", "abc1234"],
+                1,
+                "marking finding applied: no finding F9\n",
+                existing,
+            ),
+            (
+                "undecided finding",
+                ["applied", KEY, "F3", "--commit", "abc1234"],
+                1,
+                "marking finding applied: F3 is not decided\n",
+                existing,
+            ),
+            (
+                "stamps both a commit and a card key",
+                ["applied", KEY, "F2", "--commit", "abc1234", "--card", "MPL-400"],
+                0,
+                "",
+                file(
+                    2,
+                    [
+                        stored("F1", decision=FIX_NOW, **maple),
+                        other_stored("F2", decision=fix_later, applied=stamp("abc1234", "MPL-400")),
+                        stored("F3"),
+                    ],
+                    resume=RESUME,
+                ),
+            ),
+            ("unknown flag", ["applied", KEY, "F1", "--sha", "abc1234"], 2, USAGE, existing),
+            ("repeated flag", ["applied", KEY, "F1", "--commit", "abc1234", "--commit", "def5678"], 2, USAGE, existing),
+            ("flag without a value", ["applied", KEY, "F1", "--commit"], 2, USAGE, existing),
+            ("empty flag value", ["applied", KEY, "F1", "--commit", ""], 2, USAGE, existing),
+            ("no finding id", ["applied", KEY], 2, USAGE, existing),
+            ("commit is not hex", ["applied", KEY, "F1", "--commit", "abc$(id)"], 2, USAGE, existing),
+            ("commit is too short", ["applied", KEY, "F1", "--commit", "abc12"], 2, USAGE, existing),
+            ("commit is too long", ["applied", KEY, "F1", "--commit", "a" * 65], 2, USAGE, existing),
+            ("bad card key", ["applied", KEY, "F2", "--card", "mpl-400"], 2, USAGE, existing),
+        ]
+
+        no_file = (
+            "no findings file",
+            ["applied", KEY, "F9", "--commit", "abc1234"],
+            1,
+            "marking finding applied: no finding F9\n",
+            None,
+        )
+        for name, args, want_code, want_stderr, want_file in [*cases, no_file]:
+            with self.subTest(name):
+                # given
+                given = None if want_file is None else json.loads(json.dumps(existing))
+
+                # when
+                code, _, stderr, saved, leftovers = run_main(args, given)
+
+                # then
+                self.assertEqual(code, want_code)
+                self.assertEqual(stderr, want_stderr)
+                self.assertEqual(saved, want_file)
+                self.assertEqual(leftovers, [])
 
 
 class TestFindingsPath(unittest.TestCase):

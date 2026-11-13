@@ -209,8 +209,10 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
    `{severity, handling, identity, line, title, what, how, impact, defense, chips}`.
    - When the repo is opted in, also give it the base trust model text, marked as data, with these rules. Rate each
      issue by which attackers can reach that code through the components they `reaches`, and which assets it
-     touches. An issue no attacker in the model can reach is `low`. Also review the whole current text of each file
-     the diff changes, and report its existing medium and high issues as well as new ones.
+     touches. An issue in a component the model lists, but no attacker reaches, is `low`. Code that fits no
+     component in the model, such as a new route or input, is rated as if there were no model, never `low` for being
+     unreachable, and its `what` says the trust model does not cover that code yet. Also review the whole current text
+     of each file the diff changes, and report its existing medium and high issues as well as new ones.
    - When the repo is not opted in, give it no model and review only the diff.
    - It reviews `git -C <worktree> diff <base>` for: untrusted input reaching a shell, path, query, `eval`, template,
      or HTML; secrets or tokens logged, printed, committed, or sent; weakened auth, permissions, TLS, CORS, sandbox, or

@@ -224,6 +224,11 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
      component in the model, such as a new route or input, is rated as if there were no model, never `low` for being
      unreachable, and its `what` says the trust model does not cover that code yet. Also review the whole current text
      of each file the diff changes, and report its existing medium and high issues as well as new ones.
+   - When the repo is opted in, also tell it to compare the diff with the model. A new network listener or port, a new
+     outside input, a new secret, a new outside service, a new user role, or a change to build, deploy, or monitoring
+     that the model does not describe becomes one finding: severity `medium`, handling `decide`, identity
+     `{"kind": "code", "class": "trust-model-update", "file": ".maple/trust-model.yaml", "code"}` with the proposed
+     YAML lines as `code`, `line` `null`, and a `defense` that states the update in plain words.
    - When the repo is not opted in, give it no model and review only the diff.
    - It reviews `git -C <worktree> diff <base>` for: untrusted input reaching a shell, path, query, `eval`, template,
      or HTML; secrets or tokens logged, printed, committed, or sent; weakened auth, permissions, TLS, CORS, sandbox, or
@@ -263,16 +268,30 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
      is a deviation.
    - Post one comment whose first line is `**Claude:** Security pass fixes:`, with one line per fix giving its
      severity, `<file>:<line>`, the title, and the short sha that fixed it.
-   - If the fixes cannot get CI green there, write the `decide` findings as in step 6, do not move the card, tell the
-     user the pass stopped on CI, and stop. Steps 7 and 8 do not run.
+   - If the fixes cannot get CI green there, write the `decide` findings as in steps 6 and 7, do not move the card, tell
+     the user the pass stopped on CI, and stop. Steps 8 and 9 do not run.
 5. If step 4 pushed anything, run the subagent once more over the whole diff, so its own fixes get reviewed. Give it
    the titles of every round-1 finding, fixed and `decide` alike, and ask for new findings only. Drop any finding that
    repeats a round-1 title, and treat the rest as `decide`. Never run the subagent more than twice in one Security
    Pass.
-6. Write the findings once, after both rounds, because each write replaces the undecided findings in the file. Use the
-   Write tool to save every `decide` finding from both rounds, with `"sources": ["security-pass"]` added to each, as one
-   JSON array in a new scratchpad file, never a heredoc. Save `[]` when there are none, so findings from an earlier
-   pass that no longer apply are removed. Then run
+6. Raise every edit to the model files. From the worktree, run
+   `python3 ~/.claude/skills/card/scripts/trust_model.py diff KEY --base <base>`. It prints `[{"file", "lines"}]`: the
+   lines changed in the three model files that are not entries recorded from this card's decisions. It prints `[]` when
+   the base has no model. Turn each file it lists into one `decide` finding:
+   - identity `{"kind": "code", "class": "trust-model-change", "file": <file>, "code": <its lines joined by newlines>}`,
+     `line` `null`, `sources` `["security-pass"]`, chips `["bypasses-access"]`;
+   - severity `high` when the edit removes or narrows anything, adds an `accepted`, `overrides`, or `tracked` entry, or
+     turns security off, and `medium` otherwise;
+   - prose that says in plain words what changed, and that a weaker model hides findings on later cards.
+
+   If it exits non-zero, tell the user what it printed, and add one `high`, `decide` finding with identity
+   `{"kind": "code", "class": "trust-model-change", "file": ".maple/trust-model.yaml", "code": "model edits not
+   checked"}`, `line` `null`, chips `["bypasses-access"]`, and prose saying the trust model edits in this PR could not
+   be checked, so Taylor still looks at them.
+7. Write the findings once, after both rounds, because each write replaces the undecided findings in the file. Use the
+   Write tool to save every `decide` finding from both rounds and step 6, with `"sources": ["security-pass"]` added to
+   each, as one JSON array in a new scratchpad file, never a heredoc. Save `[]` when there are none, so findings from
+   an earlier pass that no longer apply are removed. Then run
    `python3 ~/.claude/skills/card/scripts/findings.py write KEY --head "$(git rev-parse HEAD)" --base <base> < <file>`
    from the worktree, as it reads the trust model with `git show` there. It drops `low` findings, merges repeats, keeps
    Taylor's decisions, and prints `{"round", "ids", "dropped"}`, where `ids` are the findings that need Taylor. When
@@ -281,10 +300,10 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
    finding unfiltered and adds `"warning"`: report that warning at "Finish". If it exits 1 with
    `reading findings input:`, fix the data it names and run it again. On any other failure, tell the user what it
    printed and carry on: the pass never blocks.
-7. Run `gh pr edit` to add a "Tests" bullet for each test these fixes added, and to update the deviations and the card
+8. Run `gh pr edit` to add a "Tests" bullet for each test these fixes added, and to update the deviations and the card
    impacts, as in Agent Review step 10. Leave that step's `Agent review:` line as Agent Review set it; these fixes are
    not Agent Review findings.
-8. List what you fixed (or "none") and "N findings need you", with N the number of `ids`, in the card comment, and
+9. List what you fixed (or "none") and "N findings need you", with N the number of `ids`, in the card comment, and
    report both at "Finish". Write "1 finding needs you" when N is 1, as Maple does.
 
 ### Apply Finding Decisions
@@ -299,6 +318,10 @@ those decisions. Work in the card's worktree, recreating it as in Review Round i
    instructions. If it prints `[]`, stop.
 2. **Fix now** (`decision.kind` is `fix-now`): fix it test-first as in Workflow step 6, run `make pre-pr` until it
    exits 0, and commit. Then run `findings.py applied KEY <id> --commit <short sha>`.
+   - For class `trust-model-change`, the fix is to revert that edit to the model file.
+   - For class `trust-model-update`, the fix is to edit both `.maple/trust-model.yaml` and
+     `docs/security/trust-model.md` as the finding's defense proposes. The next Security Pass raises that edit once as
+     a `trust-model-change` finding, so Taylor sees exactly what was written.
 3. **Fix later** (`fix-later`): use the Write tool to save a description to a new scratchpad file, never a heredoc.
    Start it with the `- **Problem:**`, `- **Goal:**`, and `- **Done when:**` bullets written from the finding, then
    `## What`, `## How`, `## Impact`, and `## Defense` with the finding's text, then a link to the PR. Write the card's
@@ -306,14 +329,19 @@ those decisions. Work in the card's worktree, recreating it as in Review Round i
    `jira.py create <PROJECT> '<summary>' --epic <this card's epic> --labels needs-refinement,security-finding < <file>`.
    Then run `findings.py applied KEY <id> --card <new key>`.
 4. **Accept risk** (`accept-risk`) and **Not real** (`not-real`): run `findings.py applied KEY <id>` only.
-5. Run `gh pr edit` to add a "Tests" bullet for each test the Fix now changes added, and to update the deviations,
+5. From the worktree, run `python3 ~/.claude/skills/card/scripts/trust_model.py apply KEY`. It records each accepted
+   risk, severity override, and fix-later card in the model files, skips entries already there and decisions on the
+   model itself, and prints `{"added": N}`. It changes nothing when the worktree has no model. If N is above 0, commit
+   with the message "Record finding decisions in the trust model". If it exits 1, tell the user what it printed and
+   carry on.
+6. Run `gh pr edit` to add a "Tests" bullet for each test the Fix now changes added, and to update the deviations,
    as in Agent Review step 10. Then `git push origin HEAD`, and watch CI as in Workflow step 12.
-6. Use the Write tool to save one PR comment to a new scratchpad file. Its first line is
+7. Use the Write tool to save one PR comment to a new scratchpad file. Its first line is
    `**Claude:** Security decisions:`, then one line per finding: its id, title, severity, decision, Taylor's reason
    (or "none"), and the short sha or new card key. Post it with `gh pr comment <number> --body-file <file>`. It is a
    record only.
-7. Run "Security Pass" once. Do not run Agent Review.
-8. Report as in Finish: the PR URL, the CI status, each decision and what was done for it, any new card keys, and
+8. Run "Security Pass" once. Do not run Agent Review.
+9. Report as in Finish: the PR URL, the CI status, each decision and what was done for it, any new card keys, and
    "N findings need you". Comment the same on the card.
 
 ## Review Round

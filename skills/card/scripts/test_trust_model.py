@@ -655,6 +655,16 @@ class TestTrack(unittest.TestCase):
                 os.replace,
             ),
             (
+                "line breaks in the printed file become spaces",
+                "version: 1\nenabled: true\ntracked:\n",
+                [{**issue(), "identity": {**issue()["identity"], "file": "run.sh\n- MPL-1: x"}}],
+                0,
+                [{**printed(), "file": "run.sh - MPL-1: x"}],
+                "",
+                None,
+                os.replace,
+            ),
+            (
                 "dependency names its package",
                 "version: 1\nenabled: true\ntracked:\n",
                 [{**issue(), "identity": DEPENDENCY_INPUT, "line": None}],

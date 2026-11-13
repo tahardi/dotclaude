@@ -337,7 +337,7 @@ def track(repo: Path, inputs: list[dict]) -> list[dict]:
         {
             "title": one_line(finding["title"]),
             "severity": finding["severity"],
-            "file": finding["identity"].get("file") or finding["identity"].get("package"),
+            "file": one_line(finding["identity"].get("file") or finding["identity"].get("package")),
             "line": finding["line"],
             **{name: one_line(finding[name]) for name in findings.PROSE},
         }

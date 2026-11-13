@@ -1,4 +1,5 @@
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -61,6 +62,38 @@ def read_model(text: str) -> dict:
 
 def read_security(text: str) -> dict:
     return load_mapping(text)
+
+
+def show(base: str, rel: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{base}:{rel}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f"{rel}: git show timed out") from error
+
+    return result.stdout if result.returncode == 0 else None
+
+
+def at_base(base: str) -> tuple[dict | None, dict | None]:
+    found = []
+
+    for rel, read in ((MODEL, read_model), (SECURITY, read_security)):
+        text = show(base, rel)
+
+        try:
+            found.append(None if text is None else read(text))
+        except (yaml.YAMLError, ValueError) as error:
+            raise ValueError(f"{rel}: {' '.join(str(error).split())}") from error
+
+    return found[0], found[1]
+
+
+def opted_in(model: dict | None, security: dict | None) -> bool:
+    return model is not None and security is not None and security.get("enabled") is True
 
 
 def identity_ok(identity: object) -> bool:

@@ -6,6 +6,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import trust_model
+
 VERSION = 1
 KEY = re.compile(r"\A[A-Z][A-Z0-9]*-\d+\Z")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
@@ -23,7 +25,7 @@ CHIPS = {
 }
 PROSE = ("what", "how", "impact", "defense")
 REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips")
-USAGE = "usage: findings.py write KEY --head SHA"
+USAGE = "usage: findings.py write KEY --head SHA [--base SHA]"
 
 
 def findings_path(key: str) -> Path:
@@ -206,13 +208,42 @@ def well_formed(data: object) -> bool:
     )
 
 
-def write(key: str, head: str, items: object, now: str) -> dict:
+def known_keys(data: dict, key: str) -> set[str]:
+    return {
+        identity_key(entry["identity"])
+        for entry in trust_model.entries(data, key)
+        if isinstance(entry, dict) and isinstance(entry.get("identity"), dict)
+    }
+
+
+def skip_known(findings: list[dict], model: dict, security: dict) -> tuple[list[dict], int]:
+    known = known_keys(model, "accepted") | known_keys(security, "tracked")
+    overrides = {
+        identity_key(entry["identity"]): entry["severity"]
+        for entry in trust_model.entries(model, "overrides")
+        if isinstance(entry, dict)
+        and isinstance(entry.get("identity"), dict)
+        and entry.get("severity") in trust_model.SEVERITIES
+    }
+    kept = []
+    for finding in findings:
+        key = identity_key(finding["identity"])
+        severity = overrides.get(key, finding["severity"])
+        if key not in known and severity != "low":
+            kept.append({**finding, "severity": severity})
+    return kept, len(findings) - len(kept)
+
+
+def write(key: str, head: str, items: object, now: str, known: tuple[dict, dict] | None = None) -> dict:
     if not KEY.match(key):
         raise ValueError(f"reading findings input: bad card key {key}")
     try:
         incoming, dropped = parse(items)
     except ValueError as error:
         raise ValueError(f"reading findings input: {error}") from error
+    skipped = 0
+    if known is not None:
+        incoming, skipped = skip_known(incoming, *known)
     path = findings_path(key)
     merged = {**merge(read_existing(path), incoming, head, now), "card": key}
     temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
@@ -225,25 +256,42 @@ def write(key: str, head: str, items: object, now: str) -> dict:
     finally:
         temp.unlink(missing_ok=True)
     ids = [finding["id"] for finding in merged["findings"] if finding["decision"] is None]
-    return {"round": merged["round"], "ids": ids, "dropped": dropped}
+    result = {"round": merged["round"], "ids": ids, "dropped": dropped}
+    return result if known is None else {**result, "skipped": skipped}
+
+
+def model_at(base: str | None) -> tuple[tuple[dict, dict] | None, str | None]:
+    if base is None:
+        return None, None
+    try:
+        model, security = trust_model.at_base(base)
+    except ValueError as error:
+        return None, f"reading trust model: {error}; findings unfiltered"
+    if model is None or security is None or not trust_model.opted_in(model, security):
+        return None, None
+    return (model, security), None
 
 
 def main() -> None:
     args = sys.argv[1:]
-    if len(args) != 4 or args[0] != "write" or args[2] != "--head" or not args[3]:
+    if len(args) not in (4, 6) or args[0] != "write" or args[2] != "--head" or not args[3]:
         print(USAGE, file=sys.stderr)
         sys.exit(2)
+    if len(args) == 6 and (args[4] != "--base" or not args[5]):
+        print(USAGE, file=sys.stderr)
+        sys.exit(2)
+    known, warning = model_at(args[5] if len(args) == 6 else None)
     try:
         items = json.load(sys.stdin)
     except ValueError:
         print("reading findings input: not valid JSON", file=sys.stderr)
         sys.exit(1)
     try:
-        result = write(args[1], args[3], items, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        result = write(args[1], args[3], items, datetime.now(timezone.utc).isoformat(timespec="seconds"), known)
     except ValueError as error:
         print(error, file=sys.stderr)
         sys.exit(1)
-    print(json.dumps(result))
+    print(json.dumps(result if warning is None else {**result, "warning": warning}))
 
 
 if __name__ == "__main__":

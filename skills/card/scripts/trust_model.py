@@ -328,18 +328,18 @@ def track(repo: Path, inputs: list[dict]) -> list[dict]:
     known = findings.known_keys(security, "tracked")
     new = [finding for key, finding in merged(incoming).items() if key not in known]
     lines = entries(security, "tracked") + [
-        {"identity": finding["identity"], "title": finding["title"], "card": None} for finding in new
+        {"identity": finding["identity"], "title": one_line(finding["title"]), "card": None} for finding in new
     ]
     rest = yaml.safe_dump({key: value for key, value in security.items() if key != "tracked"}, sort_keys=False)
     save(path, rest + "tracked:\n" + "".join(f"{entry_line(line)}\n" for line in lines))
 
     return [
         {
-            "title": finding["title"],
+            "title": one_line(finding["title"]),
             "severity": finding["severity"],
             "file": finding["identity"].get("file") or finding["identity"].get("package"),
             "line": finding["line"],
-            **{name: finding[name] for name in findings.PROSE},
+            **{name: one_line(finding[name]) for name in findings.PROSE},
         }
         for finding in new
     ]

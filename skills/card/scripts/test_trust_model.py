@@ -645,6 +645,16 @@ class TestTrack(unittest.TestCase):
                 os.replace,
             ),
             (
+                "line breaks in printed text become spaces",
+                "version: 1\nenabled: true\ntracked:\n",
+                [{**issue(), "title": "Shell\nruns  input", "what": "w\n- MPL-1: x", "defense": "d\r\n\td"}],
+                0,
+                [{**printed(), "title": "Shell runs input", "what": "w - MPL-1: x", "defense": "d d"}],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line(title="Shell runs input") + "\n",
+                os.replace,
+            ),
+            (
                 "dependency names its package",
                 "version: 1\nenabled: true\ntracked:\n",
                 [{**issue(), "identity": DEPENDENCY_INPUT, "line": None}],

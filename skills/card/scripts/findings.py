@@ -6,6 +6,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import trust_model
+
 VERSION = 1
 KEY = re.compile(r"\A[A-Z][A-Z0-9]*-\d+\Z")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
@@ -24,7 +26,7 @@ CHIPS = {
 }
 PROSE = ("what", "how", "impact", "defense")
 REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips")
-USAGE = "usage: findings.py write KEY --head SHA | read KEY | applied KEY ID [--commit SHA] [--card KEY]"
+USAGE = "usage: findings.py write KEY --head SHA [--base SHA] | read KEY | applied KEY ID [--commit SHA] [--card KEY]"
 
 
 def findings_path(key: str) -> Path:
@@ -67,15 +69,13 @@ def identity_of(value: object) -> dict:
     raise ValueError("identity kind is not code or dependency")
 
 
-def finding_of(value: object) -> dict | None:
+def finding_of(value: object) -> dict:
     if not isinstance(value, dict):
         raise ValueError("not an object")
     for name in REQUIRED:
         if name not in value:
             raise ValueError(f"missing {name}")
     severity = value["severity"]
-    if severity == "low":
-        return None
     line = value["line"]
     if line is not None and (not isinstance(line, int) or isinstance(line, bool) or line < 1):
         raise ValueError("line is not a positive number or null")
@@ -94,7 +94,7 @@ def finding_of(value: object) -> dict | None:
     return {
         "identity": identity_of(value["identity"]),
         "line": line,
-        "severity": severity if severity in ("high", "medium") else "high",
+        "severity": severity if severity in trust_model.SEVERITIES else "high",
         "sources": list(dict.fromkeys(sources)),
         "title": text(value["title"], "title", 120),
         **{name: text(value[name], name, 600) for name in PROSE},
@@ -102,21 +102,16 @@ def finding_of(value: object) -> dict | None:
     }
 
 
-def parse(items: object) -> tuple[list, int]:
+def parse(items: object) -> list:
     if not isinstance(items, list):
         raise ValueError("expected a JSON array")
     parsed = []
-    dropped = 0
     for number, value in enumerate(items, start=1):
         try:
-            finding = finding_of(value)
+            parsed.append(finding_of(value))
         except ValueError as error:
             raise ValueError(f"item {number}: {error}") from error
-        if finding is None:
-            dropped += 1
-        else:
-            parsed.append(finding)
-    return parsed, dropped
+    return parsed
 
 
 def identity_key(identity: dict) -> str:
@@ -207,18 +202,50 @@ def well_formed(data: object) -> bool:
     )
 
 
-def write(key: str, head: str, items: object, now: str) -> dict:
+def known_keys(data: dict, key: str) -> set[str]:
+    return {
+        identity_key(entry["identity"])
+        for entry in trust_model.entries(data, key)
+        if isinstance(entry, dict) and isinstance(entry.get("identity"), dict)
+    }
+
+
+def skip_known(findings: list[dict], model: dict, security: dict) -> tuple[list[dict], int]:
+    known = known_keys(model, "accepted") | known_keys(security, "tracked")
+    overrides = {
+        identity_key(entry["identity"]): entry["severity"]
+        for entry in trust_model.entries(model, "overrides")
+        if isinstance(entry, dict)
+        and isinstance(entry.get("identity"), dict)
+        and entry.get("severity") in trust_model.SEVERITIES
+    }
+    kept = []
+    for finding in findings:
+        key = identity_key(finding["identity"])
+        if key not in known and overrides.get(key) != "low":
+            kept.append({**finding, "severity": overrides.get(key, finding["severity"])})
+    return kept, len(findings) - len(kept)
+
+
+def write(key: str, head: str, items: object, now: str, known: tuple[dict, dict] | None = None) -> dict:
     if not KEY.match(key):
         raise ValueError(f"reading findings input: bad card key {key}")
     try:
-        incoming, dropped = parse(items)
+        incoming = parse(items)
     except ValueError as error:
         raise ValueError(f"reading findings input: {error}") from error
+    skipped = 0
+    if known is not None:
+        incoming, skipped = skip_known(incoming, *known)
+    kept = [finding for finding in incoming if finding["severity"] != "low"]
+    dropped = len(incoming) - len(kept)
+    incoming = kept
     path = findings_path(key)
     merged = {**merge(read_existing(path), incoming, head, now), "card": key}
     save(path, merged)
     ids = [finding["id"] for finding in merged["findings"] if finding["decision"] is None]
-    return {"round": merged["round"], "ids": ids, "dropped": dropped}
+    result = {"round": merged["round"], "ids": ids, "dropped": dropped}
+    return result if known is None else {**result, "skipped": skipped}
 
 
 def save(path: Path, data: dict) -> None:
@@ -278,13 +305,21 @@ def applied_flags(args: list) -> dict:
     return flags
 
 
+def run_write(args: list) -> dict:
+    if len(args) == 6 and (args[4] != "--base" or not args[5]):
+        usage()
+    known, warning = trust_model.model_at(args[5]) if len(args) == 6 else (None, None)
+    try:
+        items = json.load(sys.stdin)
+    except ValueError as error:
+        raise ValueError("reading findings input: not valid JSON") from error
+    result = write(args[1], args[3], items, now(), known)
+    return result if warning is None else {**result, "warning": warning}
+
+
 def run(args: list) -> object:
-    if len(args) == 4 and args[0] == "write" and args[2] == "--head" and args[3]:
-        try:
-            items = json.load(sys.stdin)
-        except ValueError as error:
-            raise ValueError("reading findings input: not valid JSON") from error
-        return write(args[1], args[3], items, now())
+    if len(args) in (4, 6) and args[0] == "write" and args[2] == "--head" and args[3]:
+        return run_write(args)
     if len(args) == 2 and args[0] == "read" and KEY.match(args[1]):
         return read(args[1])
     if len(args) >= 3 and args[0] == "applied" and KEY.match(args[1]):

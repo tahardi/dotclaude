@@ -108,5 +108,7 @@ security-deps-npm-audit: | $(security_results)
 		--json \
 		> $(security_results)/npm-audit.json \
 		|| code=$$?; \
-	[ $$code -le 1 ] || echo "warning: npm audit failed: exit $$code"; \
+	{ [ $$code -le 1 ] && python3 -c 'import json, sys; sys.exit("error" in json.load(open(sys.argv[1])))' \
+		$(security_results)/npm-audit.json; } \
+		|| echo "warning: npm audit failed: exit $$code"; \
 	echo "npm audit results: $(security_results)/npm-audit.json"

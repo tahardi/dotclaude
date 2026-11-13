@@ -28,9 +28,9 @@ NPM = {"package.json": PACKAGE_JSON % "1.0.0", "package-lock.json": "{}"}
 def fake_bin(root, **exits):
     bin_dir = root / "fake-bin"
     bin_dir.mkdir()
-    for name, code in exits.items():
+    for name, body in exits.items():
         path = bin_dir / name
-        path.write_text(f"#!/bin/sh\nexit {code}\n")
+        path.write_text(f"#!/bin/sh\nexit {body}\n" if isinstance(body, int) else f"#!/bin/sh\n{body}\n")
         path.chmod(0o755)
     return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
@@ -108,12 +108,14 @@ class TestSecurityMk(KitTestCase):
                     self.assertIn(f"warning: skipping {tool}: cannot reach", result.stdout)
 
     def test_tool_failure(self):
+        failing = {"curl": 0, "go": 3, "npm": 3, "uvx": 3}
         cases = [
-            ("secrets gate", "security-secrets", False, []),
-            ("workflows gate", "security-workflows", False, []),
+            ("secrets gate", "security-secrets", failing, False, [], []),
+            ("workflows gate", "security-workflows", failing, False, [], []),
             (
                 "deps report",
                 "security-deps",
+                failing,
                 True,
                 [
                     "warning: osv-scanner failed: exit 3",
@@ -123,22 +125,41 @@ class TestSecurityMk(KitTestCase):
                     "warning: npm audit failed: exit 3",
                     "npm audit results: security-results/npm-audit.json",
                 ],
+                [],
+            ),
+            (
+                "deps report with advisories",
+                "security-deps",
+                {"curl": 0, "go": 1, "npm": "echo '{\"vulnerabilities\": {}}'; exit 1"},
+                True,
+                ["warning: govulncheck failed: exit 1"],
+                ["warning: osv-scanner failed", "warning: npm audit failed"],
+            ),
+            (
+                "npm audit error",
+                "security-deps",
+                {"curl": 0, "go": 0, "npm": "echo '{\"error\": {\"code\": \"ENOLOCK\"}}'; exit 1"},
+                True,
+                ["warning: npm audit failed: exit 1"],
+                ["warning: osv-scanner failed", "warning: govulncheck failed"],
             ),
         ]
-        for name, target, passes, lines in cases:
+        for name, target, fakes, passes, present, absent in cases:
             with self.subTest(name):
                 # given
                 self.setUp()
                 self.write({"go.mod": "module x\n", **NPM})
-                env = fake_bin(self.repo, curl=0, go=3, npm=3, uvx=3)
+                env = fake_bin(self.repo, **fakes)
 
                 # when
                 result = self.make(target, env=env)
 
                 # then
                 self.assertEqual(result.returncode == 0, passes, result.stdout + result.stderr)
-                for line in lines:
+                for line in present:
                     self.assertIn(line, result.stdout)
+                for line in absent:
+                    self.assertNotIn(line, result.stdout)
 
     def test_pins(self):
         cases = [

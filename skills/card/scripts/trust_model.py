@@ -311,7 +311,7 @@ def entry_lines(file: dict) -> dict[str, list[str]]:
             reason = decision.get("reason")
             entry = {"identity": identity, "title": title, "reason": reason, "card": card, "finding": finding["id"]}
             lines.setdefault(f"{MODEL}:accepted", []).append(entry_line({**entry, "at": at}))
-            lines.setdefault(f"{MD}:{ACCEPTED_HEADING}", []).append(f"- {title} ({tag}): {one_line(reason)}")
+            lines.setdefault(f"{MD}:{ACCEPTED_HEADING}", []).append(f"- {one_line(title)} ({tag}): {one_line(reason)}")
 
         if finding.get("severityOverride") in SEVERITIES:
             severity = finding["severityOverride"]
@@ -319,7 +319,7 @@ def entry_lines(file: dict) -> dict[str, list[str]]:
             lines.setdefault(f"{MODEL}:overrides", []).append(
                 entry_line({**entry, "finding": finding["id"], "at": at})
             )
-            lines.setdefault(f"{MD}:{OVERRIDES_HEADING}", []).append(f"- {title} ({tag}): {severity}")
+            lines.setdefault(f"{MD}:{OVERRIDES_HEADING}", []).append(f"- {one_line(title)} ({tag}): {severity}")
 
         if decision.get("kind") == "fix-later" and applied.get("cardKey"):
             entry = {"identity": identity, "title": title, "card": applied["cardKey"]}
@@ -342,14 +342,24 @@ def section_end(lines: list[str], start: int, markdown: bool) -> int:
     return end
 
 
-def insert(text: str, section: str, new: list[str], markdown: bool) -> str:
+def insert(rel: str, text: str, section: str, new: list[str], markdown: bool) -> str:
     lines = text.splitlines()
     header = section if markdown else f"{section}:"
-    starts = [index for index, line in enumerate(lines) if line.rstrip() == header]
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if (line.rstrip() == header if markdown else line.startswith(header))
+    ]
 
     if not starts:
         lines.append(header)
         starts = [len(lines) - 1]
+
+    if not markdown:
+        if lines[starts[0]][len(header) :].strip() not in ("", "[]"):
+            raise ValueError(f"writing trust model: {rel}: {section} is an inline list")
+
+        lines[starts[0]] = header
 
     end = section_end(lines, starts[0], markdown)
     return "\n".join(lines[:end] + new + lines[end:]) + "\n"
@@ -373,7 +383,7 @@ def apply(repo: Path, file: dict) -> int:
         missing = [line for line in dict.fromkeys(new) if line not in present]
 
         if missing:
-            path.write_text(insert(text, section, missing, rel == MD))
+            path.write_text(insert(rel, text, section, missing, rel == MD))
             added += len(missing)
 
     return added
@@ -461,6 +471,7 @@ def main() -> None:
         print(problem)
 
     sys.exit(1 if found else 0)
+
 
 if __name__ == "__main__":
     main()

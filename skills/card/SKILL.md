@@ -329,7 +329,8 @@ those decisions. Work in the card's worktree, recreating it as in Review Round i
 5. From the worktree, run `python3 ~/.claude/skills/card/scripts/trust_model.py apply KEY`. It records each accepted
    risk, severity override, and fix-later card in the model files, skips entries already there and decisions on the
    model itself, and prints `{"added": N}`. It changes nothing when the worktree has no model. If N is above 0, commit
-   with the message "Record finding decisions in the trust model".
+   with the message "Record finding decisions in the trust model". If it exits 1, tell the user what it printed and
+   carry on.
 6. Run `gh pr edit` to add a "Tests" bullet for each test the Fix now changes added, and to update the deviations,
    as in Agent Review step 10. Then `git push origin HEAD`, and watch CI as in Workflow step 12.
 7. Use the Write tool to save one PR comment to a new scratchpad file. Its first line is

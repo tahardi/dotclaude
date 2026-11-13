@@ -315,15 +315,22 @@ class TestProblems(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
+def main_case(name, args, before, code, out, err, after=(), stored=None):
+    return name, args, before, list(after), stored, code, out, err
+
+
 class TestMain(unittest.TestCase):
     def test_main(self):
+        decided = json.dumps(findings_file(ACCEPTED))
+        no_model = [remove(MD), remove(MODEL), remove(SECURITY)]
+        diff = ["diff", "MPL-340", "--base", "BASE"]
         cases = [
-            ("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, MISSING, ""),
-            ("no problems", ["check", "DIR"], [], 0, "", ""),
-            ("no arguments", [], [], 2, "", USAGE),
-            ("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
-            ("base opted in", ["base", "BASE"], [], 0, '{"optedIn": true}\n', ""),
-            (
+            main_case("problems", ["check", "DIR"], [remove(MODEL), remove(SECURITY)], 1, MISSING, ""),
+            main_case("no problems", ["check", "DIR"], [], 0, "", ""),
+            main_case("no arguments", [], [], 2, "", USAGE),
+            main_case("wrong command", ["fix", "DIR"], [], 2, "", USAGE),
+            main_case("base opted in", ["base", "BASE"], [], 0, '{"optedIn": true}\n', ""),
+            main_case(
                 "base with enabled yes",
                 ["base", "BASE"],
                 [replace(SECURITY, "enabled: true", "enabled: yes")],
@@ -331,16 +338,16 @@ class TestMain(unittest.TestCase):
                 '{"optedIn": false}\n',
                 "",
             ),
-            (
-                "base with bad yaml",
+            main_case("base with bad yaml", ["base", "BASE"], [write(MODEL, "assets: [\n")], 0, Unfiltered(), ""),
+            main_case(
+                "base with a model that fails the check",
                 ["base", "BASE"],
-                [write(MODEL, "assets: [\n")],
+                [model(empty("attackers"))],
                 0,
                 Unfiltered(),
                 "",
             ),
-            ("base with a model that fails the check", ["base", "BASE"], [model(empty("attackers"))], 0, Unfiltered(), ""),
-            (
+            main_case(
                 "base with a security file that fails the check",
                 ["base", "BASE"],
                 [replace(SECURITY, "version: 1", "version: 2")],
@@ -348,97 +355,65 @@ class TestMain(unittest.TestCase):
                 Unfiltered(SECURITY),
                 "",
             ),
-            ("base without a sha", ["base"], [], 2, "", USAGE),
-        ]
-
-        for name, args, changes, code, out, err in cases:
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
-                # given
-                repo = Path(directory)
-                copy_templates(repo)
-                for change in changes:
-                    change(repo)
-                base = commit_files(directory, {})
-                argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
-                stdout, stderr = io.StringIO(), io.StringIO()
-
-                # when
-                with (
-                    contextlib.chdir(directory),
-                    mock.patch("sys.argv", argv),
-                    contextlib.redirect_stdout(stdout),
-                    contextlib.redirect_stderr(stderr),
-                    self.assertRaises(SystemExit) as raised,
-                ):
-                    trust_model.main()
-
-                # then
-                self.assertEqual(raised.exception.code, code)
-                self.assertEqual(stdout.getvalue(), out)
-                self.assertEqual(stderr.getvalue(), err)
-
-    def test_main_findings(self):
-        decided = json.dumps(findings_file(ACCEPTED))
-        hand_edit = replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")
-        cases = [
-            (
-                "diff with no model at base",
-                ["diff", "MPL-340", "--base", "BASE"],
-                {},
-                [copy_templates],
-                None,
-                0,
-                "[]\n",
-                "",
-            ),
-            (
+            main_case("base without a sha", ["base"], [], 2, "", USAGE),
+            main_case("diff with no model at base", diff, no_model, 0, "[]\n", "", after=[copy_templates]),
+            main_case(
                 "diff of a hand edit to attackers",
-                ["diff", "MPL-340", "--base", "BASE"],
-                templates_text(),
-                [hand_edit],
-                None,
+                diff,
+                [],
                 0,
                 json.dumps([{"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]}])
                 + "\n",
                 "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
             ),
-            (
+            main_case(
                 "diff after apply",
-                ["diff", "MPL-340", "--base", "BASE"],
-                templates_text(),
-                [lambda repo: trust_model.apply(repo, json.loads(decided))],
-                decided,
+                diff,
+                [],
                 0,
                 "[]\n",
                 "",
+                after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
+                stored=decided,
             ),
-            (
+            main_case(
                 "diff with an unreadable findings file",
-                ["diff", "MPL-340", "--base", "BASE"],
-                templates_text(),
+                diff,
                 [],
-                "{",
                 1,
                 "",
                 "reading findings: MPL-340.json: not valid JSON\n",
+                stored="{",
             ),
-            ("diff with a bad card key", ["diff", "nope", "--base", "BASE"], {}, [], None, 2, "", USAGE),
-            ("diff without a base", ["diff", "MPL-340"], {}, [], None, 2, "", USAGE),
-            ("apply", ["apply", "MPL-340"], templates_text(), [], decided, 0, '{"added": 2}\n', ""),
-            ("apply with no findings file", ["apply", "MPL-340"], templates_text(), [], None, 0, '{"added": 0}\n', ""),
-            ("apply with a bad card key", ["apply", "mpl"], {}, [], None, 2, "", USAGE),
+            main_case(
+                "diff with an unknown base",
+                ["diff", "MPL-340", "--base", "0" * 40],
+                [],
+                1,
+                "",
+                f"base commit {'0' * 40} is not in this repo\n",
+            ),
+            main_case("diff with a bad card key", ["diff", "nope", "--base", "BASE"], [], 2, "", USAGE),
+            main_case("diff without a base", ["diff", "MPL-340"], [], 2, "", USAGE),
+            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided),
+            main_case("apply with no findings file", ["apply", "MPL-340"], [], 0, '{"added": 0}\n', ""),
+            main_case("apply with a bad card key", ["apply", "mpl"], [], 2, "", USAGE),
         ]
 
-        for name, args, base_files, changes, stored_text, code, out, err in cases:
+        for name, args, before, after, stored, code, out, err in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as store:
                 # given
                 repo = Path(directory)
-                base = commit_files(directory, base_files)
-                for change in changes:
+                copy_templates(repo)
+                for change in before:
                     change(repo)
-                if stored_text is not None:
-                    (Path(store) / "MPL-340.json").write_text(stored_text)
-                argv = ["trust_model.py", *[{"BASE": base}.get(arg, arg) for arg in args]]
+                base = commit_files(directory, {})
+                for change in after:
+                    change(repo)
+                if stored is not None:
+                    (Path(store) / "MPL-340.json").write_text(stored)
+                argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
                 stdout, stderr = io.StringIO(), io.StringIO()
 
                 # when
@@ -527,6 +502,7 @@ class TestAtBase(unittest.TestCase):
                 else:
                     self.assertTrue(error and error.startswith(want_error) and len(error) > len(want_error), error)
 
+
 DECIDED_AT = "2026-11-11T18:00:00+00:00"
 ACCEPTED_LINE = (
     '  - {"identity": {"kind": "code", "class": "command-injection", "file": "api/run.go", '
@@ -610,6 +586,22 @@ class TestEntryLines(unittest.TestCase):
                     ACCEPTED_HEADING: [ACCEPTED_BULLET.replace("local only", "none")],
                 },
             ),
+            (
+                "multi-line title",
+                finding(title="Branch names\n reach a shell", decision=decision("accept-risk", "local only")),
+                {
+                    ACCEPTED_KEY: [ACCEPTED_LINE.replace("Branch names reach", "Branch names\\n reach")],
+                    ACCEPTED_HEADING: [ACCEPTED_BULLET],
+                },
+            ),
+            (
+                "multi-line title overridden",
+                finding(title="Branch names\n reach a shell", decision=decision("fix-now"), severityOverride="low"),
+                {
+                    OVERRIDES_KEY: [OVERRIDE_LINE.replace("Branch names reach", "Branch names\\n reach")],
+                    OVERRIDES_HEADING: [OVERRIDE_BULLET],
+                },
+            ),
             ("model change accepted", finding(identity=model_class, decision=decision("accept-risk", "ok")), {}),
             (
                 "model update overridden",
@@ -652,6 +644,35 @@ class TestApply(unittest.TestCase):
             ("a second run adds nothing", [], 2, all_three, 0, {MODEL: [ACCEPTED_LINE]}),
             ("no model writes nothing", [remove(MODEL)], 1, all_three, 0, {}),
             ("nothing decided", [], 1, findings_file(finding()), 0, {}),
+            (
+                "an empty inline list becomes a block list",
+                [replace(MODEL, "accepted:\n", "accepted: []\n")],
+                1,
+                findings_file(ACCEPTED),
+                2,
+                {MODEL: [f"accepted:\n{ACCEPTED_LINE}\noverrides:\n"]},
+            ),
+            (
+                "a filled inline list stops with an error",
+                [replace(MODEL, "accepted:\n", 'accepted: [{"title": "kept"}]\n')],
+                1,
+                findings_file(ACCEPTED),
+                f"writing trust model: {MODEL}: accepted is an inline list",
+                {},
+            ),
+            (
+                "new lines go after existing entries",
+                [lambda repo: trust_model.apply(repo, findings_file(ACCEPTED))],
+                1,
+                findings_file({**ACCEPTED, "id": "F5"}),
+                2,
+                {
+                    MODEL: [f"accepted:\n{ACCEPTED_LINE}\n{ACCEPTED_LINE.replace('F1', 'F5')}\noverrides:\n"],
+                    MD: [
+                        f"None yet.\n{ACCEPTED_BULLET}\n{ACCEPTED_BULLET.replace('F1', 'F5')}\n\n## Severity Overrides",
+                    ],
+                },
+            ),
         ]
 
         for name, changes, runs, data, want, contains in cases:
@@ -666,7 +687,10 @@ class TestApply(unittest.TestCase):
                 before = {rel: (repo / rel).read_text() for rel in (MD, MODEL, SECURITY) if (repo / rel).exists()}
 
                 # when
-                got = trust_model.apply(repo, data)
+                try:
+                    got = trust_model.apply(repo, data)
+                except ValueError as error:
+                    got = str(error)
 
                 # then
                 self.assertEqual(got, want)
@@ -674,9 +698,9 @@ class TestApply(unittest.TestCase):
                 for rel, parts in contains.items():
                     for part in parts:
                         self.assertIn(part, after[rel])
-                if want == 0:
+                if want == 0 or isinstance(want, str):
                     self.assertEqual(after, before)
-                if (repo / MODEL).exists():
+                if (repo / MODEL).exists() and not isinstance(want, str):
                     self.assertEqual(problems(repo), [])
 
 
@@ -725,13 +749,6 @@ class TestUnexplained(unittest.TestCase):
 
                 # then
                 self.assertEqual(got, want)
-
-
-def templates_text():
-    return {
-        rel: (TEMPLATES / name).read_text()
-        for name, rel in [("trust-model.md", MD), ("trust-model.yaml", MODEL), ("security.yaml", SECURITY)]
-    }
 
 
 if __name__ == "__main__":

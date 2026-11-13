@@ -286,7 +286,7 @@ those decisions. Work in the card's worktree, recreating it as in Review Round i
 3. **Fix later** (`fix-later`): use the Write tool to save a description to a new scratchpad file, never a heredoc.
    Start it with the `- **Problem:**`, `- **Goal:**`, and `- **Done when:**` bullets written from the finding, then
    `## What`, `## How`, `## Impact`, and `## Defense` with the finding's text, then a link to the PR. Write the card's
-   summary yourself in plain words from the finding, with no quotes, backticks, or `$`. Run
+   summary yourself in plain words from the finding, with no apostrophes, quotes, backticks, or `$`. Run
    `jira.py create <PROJECT> '<summary>' --epic <this card's epic> --labels needs-refinement,security-finding < <file>`.
    Then run `findings.py applied KEY <id> --card <new key>`.
 4. **Accept risk** (`accept-risk`) and **Not real** (`not-real`): run `findings.py applied KEY <id>` only.

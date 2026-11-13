@@ -400,10 +400,10 @@ reviewed it with the code.
 1. **Changes to existing cards:** for each one, run
    `jira.py comment <OTHER> "Card impact from KEY (<PR url>): <the change>"`. The comment must start with
    `Card impact from`; `jira.py get` prints those comments as Amendments. Never edit another card's description.
-2. **New cards:** for each one, use the Write tool to save its description to a new scratchpad file, never a heredoc,
-   and pipe it to
-   `jira.py create <PROJECT> '<summary>' --epic <epic> --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`.
-   The summary may come from finding text, so write it in plain words with no apostrophes, quotes, backticks, or `$`.
+2. **New cards:** for each one, use the Write tool to save its summary and its description to two new scratchpad
+   files, never a heredoc, and pipe the description to `jira.py create <PROJECT> "$(cat <summary file>)" --epic <epic>
+   --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`. The summary may come from finding text, so it
+   never goes on the command line itself.
    Start the description with the three-bullet summary from the refine skill's Template (`- **Problem:**`,
    `- **Goal:**`, `- **Done when:**`, plain English for Taylor). Use the labels the impact names, and add
    `needs-refinement` unless the impact gave the card full steps and acceptance criteria. Add `parallelizable` only

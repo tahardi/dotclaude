@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -463,6 +464,13 @@ def issue(severity="high", code='eval "$1"', title="Shell runs input"):
     }
 
 
+DEPENDENCY_INPUT = {"kind": "dependency", "advisory": "GHSA-35jh-r3h4-6jhm", "package": "lodash"}
+
+
+def fail(*args, **kwargs):
+    raise OSError(28, "No space left on device")
+
+
 def tracked_line(code='eval "$1"', title="Shell runs input"):
     identity = {"kind": "code", "class": "command-injection", "file": "run.sh", "hash": code_hash(code)}
     return "  - " + json.dumps({"identity": identity, "title": title, "card": None})
@@ -542,6 +550,78 @@ class TestTrack(unittest.TestCase):
                 f"reading trust model: {SECURITY} is missing\n",
                 None,
             ),
+            (
+                "medium after low with one identity is kept",
+                "version: 1\nenabled: true\ntracked:\n",
+                [issue("low"), issue("medium", title="Again")],
+                0,
+                [printed("medium", title="Again")],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line(title="Again") + "\n",
+            ),
+            (
+                "unknown severity counts as high",
+                "version: 1\nenabled: true\ntracked:\n",
+                [issue("critical")],
+                0,
+                [printed("high")],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+            ),
+            (
+                "dependency names its package",
+                "version: 1\nenabled: true\ntracked:\n",
+                [{**issue(), "identity": DEPENDENCY_INPUT, "line": None}],
+                0,
+                [{**printed(), "file": "lodash", "line": None}],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + "  - " + json.dumps({"identity": DEPENDENCY, "title": "Shell runs input", "card": None}) + "\n",
+            ),
+            (
+                "no tracked key",
+                "version: 1\nenabled: true\n",
+                [issue()],
+                0,
+                [printed()],
+                "",
+                "version: 1\nenabled: true\ntracked:\n" + tracked_line() + "\n",
+            ),
+            (
+                "input not JSON",
+                "version: 1\nenabled: true\ntracked:\n",
+                "not json",
+                1,
+                None,
+                "reading findings input: not valid JSON\n",
+                "version: 1\nenabled: true\ntracked:\n",
+            ),
+            (
+                "security file bad yaml",
+                "enabled: : true\n",
+                [issue()],
+                1,
+                None,
+                Reading(SECURITY),
+                "enabled: : true\n",
+            ),
+            (
+                "security file not a mapping",
+                "true\n",
+                [issue()],
+                1,
+                None,
+                Reading(SECURITY),
+                "true\n",
+            ),
+            (
+                "write fails",
+                "version: 1\nenabled: true\ntracked:\n",
+                [issue()],
+                1,
+                None,
+                f"writing trust model: {SECURITY}: No space left on device\n",
+                "version: 1\nenabled: true\ntracked:\n",
+            ),
         ]
 
         for name, before, inputs, code, out, err, after in cases:
@@ -557,7 +637,8 @@ class TestTrack(unittest.TestCase):
                 # when
                 with (
                     mock.patch("sys.argv", argv),
-                    mock.patch("sys.stdin", io.StringIO(json.dumps(inputs))),
+                    mock.patch("sys.stdin", io.StringIO(inputs if isinstance(inputs, str) else json.dumps(inputs))),
+                    mock.patch.object(trust_model.os, "replace", side_effect=fail if name == "write fails" else os.replace),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
                     self.assertRaises(SystemExit) as raised,
@@ -570,7 +651,7 @@ class TestTrack(unittest.TestCase):
                     self.assertEqual(stdout.getvalue(), "")
                 else:
                     self.assertEqual(json.loads(stdout.getvalue()), out)
-                self.assertEqual(stderr.getvalue(), err)
+                self.assertEqual(stderr.getvalue().rstrip("\n") if isinstance(err, Reading) else stderr.getvalue(), err)
                 if after is not None:
                     self.assertEqual((repo / SECURITY).read_text(), after)
 

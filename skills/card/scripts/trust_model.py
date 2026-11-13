@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -283,14 +284,26 @@ def problems(repo: Path) -> list[str]:
 def merged(inputs: list[dict]) -> dict[str, dict]:
     combined: dict[str, dict] = {}
 
-    for finding in inputs:
+    for finding in (finding for finding in inputs if finding["severity"] != "low"):
         key = findings.identity_key(finding["identity"])
         first = combined.setdefault(key, finding)
 
         if finding["severity"] == "high":
             first["severity"] = "high"
 
-    return {key: finding for key, finding in combined.items() if finding["severity"] != "low"}
+    return combined
+
+
+def save(path: Path, text: str) -> None:
+    temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+
+    try:
+        temp.write_text(text)
+        os.replace(temp, path)
+    except OSError as error:
+        raise ValueError(f"writing trust model: {SECURITY}: {error.strerror or error}") from error
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def track(repo: Path, inputs: list[dict]) -> list[dict]:
@@ -315,13 +328,13 @@ def track(repo: Path, inputs: list[dict]) -> list[dict]:
         {"identity": finding["identity"], "title": finding["title"], "card": None} for finding in new
     ]
     rest = yaml.safe_dump({key: value for key, value in security.items() if key != "tracked"}, sort_keys=False)
-    path.write_text(rest + "tracked:\n" + "".join(f"  - {json.dumps(line)}\n" for line in lines))
+    save(path, rest + "tracked:\n" + "".join(f"  - {json.dumps(line)}\n" for line in lines))
 
     return [
         {
             "title": finding["title"],
             "severity": finding["severity"],
-            "file": finding["identity"].get("file"),
+            "file": finding["identity"].get("file") or finding["identity"].get("package"),
             "line": finding["line"],
             **{name: finding[name] for name in findings.PROSE},
         }

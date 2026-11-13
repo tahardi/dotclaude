@@ -148,10 +148,11 @@ part, and merging the PR turns security on for the repo.
       issues, merges repeats, skips issues already tracked, adds a `tracked` line with `"card": null` to
       `.maple/security.yaml` for each new one, and prints the new issues. If it exits 1 with
       `reading findings input:`, fix the data it names and run it again.
-   4. For each issue it printed, add one bullet to the PR's "Card impacts": `- New card: <title> (epic <this card's
-      epic, or none>, labels needs-refinement,security-finding): <what> <how> <impact> Defense: <defense> Found in
-      <file>:<line> by the opt-in triage.` When this card has the `test-card` label, start the summary with `[TEST] `
-      and add `test-card` to the labels.
+   4. For each issue it printed, write one bullet and keep it for the PR's "Card impacts" at step 10:
+      `- New card: <title> (epic <this card's epic, or none>, labels needs-refinement,security-finding): <what> <how>
+      <impact> Defense: <defense> Found in <file>:<line> by the opt-in triage.` When `line` is null, write
+      `Found in <file>` instead. When this card has the `test-card` label, start the summary with `[TEST] ` and add
+      `test-card` to the labels.
 6. Commit, then continue at Workflow step 8.
 
 ## Agent Review
@@ -213,8 +214,8 @@ make other cards wrong or show missing work.
 3. For each card that would now be wrong, write one bullet: `- <OTHER KEY>: <exact change, e.g. "use parseFoo(text)
    not parseFoo(text, opts)">`. For missing work, write `- New card: <summary> (epic <KEY>, blocked by <keys>, blocks
    <keys>, <points> pts): <what it covers>`.
-4. Put the bullets in the PR's "Card impacts" section, or "None". Do not change other cards now. They are applied at
-   merge, after the user has reviewed them.
+4. Put the bullets in the PR's "Card impacts" section, or "None". Add the opt-in triage bullets from "Trust Model"
+   unchanged. Do not change other cards now. They are applied at merge, after the user has reviewed them.
 
 ## Security Pass
 
@@ -399,8 +400,10 @@ reviewed it with the code.
 1. **Changes to existing cards:** for each one, run
    `jira.py comment <OTHER> "Card impact from KEY (<PR url>): <the change>"`. The comment must start with
    `Card impact from`; `jira.py get` prints those comments as Amendments. Never edit another card's description.
-2. **New cards:** for each one, pipe its description to
-   `jira.py create <PROJECT> "<summary>" --epic <epic> --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`.
+2. **New cards:** for each one, use the Write tool to save its description to a new scratchpad file, never a heredoc,
+   and pipe it to
+   `jira.py create <PROJECT> '<summary>' --epic <epic> --labels <labels> --points <n> --blocked-by <keys> --blocks <keys>`.
+   The summary may come from finding text, so write it in plain words with no apostrophes, quotes, backticks, or `$`.
    Start the description with the three-bullet summary from the refine skill's Template (`- **Problem:**`,
    `- **Goal:**`, `- **Done when:**`, plain English for Taylor). Use the labels the impact names, and add
    `needs-refinement` unless the impact gave the card full steps and acceptance criteria. Add `parallelizable` only

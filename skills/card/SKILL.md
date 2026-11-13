@@ -137,6 +137,7 @@ part, and merging the PR turns security on for the repo.
      who uses it, then the template's headings in order. Each section is short plain prose with one bullet per YAML
      entry, starting with its id in backticks.
    - Leave `accepted`, `overrides`, and `tracked` empty. Only scripts write entries there.
+   - Then run "Security Kit" below.
 4. Run `python3 ~/.claude/skills/card/scripts/trust_model.py check .` and fix the files until it exits 0.
 5. Triage the issues the repo already has, once, so they become backlog cards at merge and no later card raises them:
    1. Start the Security Pass subagent as in "Security Pass" step 2, with two changes: it reviews the whole repo, every
@@ -154,6 +155,23 @@ part, and merging the PR turns security on for the repo.
       `Found in <file>` instead. When this card has the `test-card` label, start the summary with `[TEST] ` and add
       `test-card` to the labels.
 6. Commit, then continue at Workflow step 8.
+
+## Security Kit
+
+Run this from "Trust Model" step 3. It adds the fast security checks for the repo's languages to `make pre-pr` and to
+CI. The kit owns both files: never edit them in a repo; copy them again to update them.
+
+1. Copy `~/.claude/skills/card/security-kit/security.mk` to the worktree root and
+   `~/.claude/skills/card/security-kit/security.yml` to `.github/workflows/security.yml`.
+2. Add `include security.mk` near the top of the repo's Makefile and `security` to the `pre-pr` prerequisites. Add
+   `security-results/` to `.gitignore`.
+3. Remove the targets, module files (such as `modfiles/*/go.mod`), and CI jobs that run gitleaks, govulncheck, or
+   `npm audit`. The kit replaces them.
+4. Run `make security`. Fix every failure from `security-secrets`, `security-workflows`, and `security-pins` in this
+   PR, such as pinning an action to a commit. Leave dependency advisories alone: `security-deps` only reports. If
+   gitleaks flags old commits, stop and ask Taylor.
+5. The kit reads only manifests at the repo root. If the repo has manifests in subfolders, say in the PR that the kit
+   does not check them.
 
 ## Agent Review
 

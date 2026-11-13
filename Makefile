@@ -6,7 +6,7 @@ SHELL := bash
 .DELETE_ON_ERROR:
 .SUFFIXES:
 
-gitleaks_version=v8.30.1
+include security.mk
 
 .PHONY: pre-pr
 pre-pr: \
@@ -15,7 +15,7 @@ pre-pr: \
 	test-scripts \
 	test-install \
 	syntax \
-	secrets
+	security
 
 .PHONY: shellcheck
 shellcheck:
@@ -45,10 +45,3 @@ syntax:
 		-r \
 		python3 \
 		-c 'import sys, yaml; [yaml.safe_load(open(p)) for p in sys.argv[1:]]'
-
-.PHONY: secrets
-secrets:
-	@go run github.com/zricethezav/gitleaks/v8@$(gitleaks_version) git \
-		--redact \
-		--no-banner \
-		.

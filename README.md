@@ -20,4 +20,4 @@ Taylor's Claude Code configuration: global instructions, skills, and settings. C
 
 When `/card` finds a PR Taylor merged, it treats the PR as approved and skips review: card to Done, worktree and branch removed, the PR's card impacts applied (which can create new Jira cards), and its test cards moved to Done.
 
-Never commit secrets, tokens, memory files, or transcripts. `make pre-pr` runs shellcheck, the skill and script tests, the install script test, JSON and YAML syntax checks, and gitleaks. It needs shellcheck, Python 3 with PyYAML (`python3-yaml`), jq, and Go (for gitleaks).
+Never commit secrets, tokens, memory files, or transcripts. `make pre-pr` runs shellcheck, the skill and script tests, the install script test, JSON and YAML syntax checks, and the security kit (`make security`: secret scan, workflow lint, pinning check, dependency audit). It needs shellcheck, Python 3 with PyYAML (`python3-yaml`), jq, Go, curl, and uv. The security checks skip with a warning when offline.

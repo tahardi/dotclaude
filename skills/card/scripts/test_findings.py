@@ -479,7 +479,7 @@ def run_main(args, existing):
         path = os.path.join(folder, f"{KEY}.json")
         if existing is not None:
             with open(path, "w") as handle:
-                json.dump(existing, handle)
+                handle.write(existing if isinstance(existing, str) else json.dumps(existing))
         with mock.patch.object(sys, "argv", ["findings.py", *args]), mock.patch.object(
             findings, "now", return_value=NOW
         ):
@@ -491,7 +491,8 @@ def run_main(args, existing):
         saved = None
         if os.path.exists(path):
             with open(path) as handle:
-                saved = json.load(handle)
+                raw = handle.read()
+            saved = raw if isinstance(existing, str) else json.loads(raw)
         leftovers = [entry for entry in os.listdir(folder) if entry.endswith(".tmp")]
     return code, stdout.getvalue(), stderr.getvalue(), saved, leftovers
 
@@ -537,6 +538,26 @@ class TestRead(unittest.TestCase):
                 # then
                 self.assertEqual((code, stderr), (0, ""))
                 self.assertEqual(json.loads(stdout), want)
+
+    def test_read_errors(self):
+        newer = {**file(1, []), "version": 2}
+        cases = [
+            ("damaged file", ["read", KEY], "{", 1, f"reading findings: {KEY}.json: not valid JSON\n"),
+            ("newer file", ["read", KEY], newer, 1, f"reading findings: {KEY}.json is from a newer version\n"),
+            ("bad card key", ["read", "mpl-1"], None, 2, USAGE),
+            ("extra argument", ["read", KEY, "F1"], None, 2, USAGE),
+        ]
+
+        for name, args, existing, want_code, want_stderr in cases:
+            with self.subTest(name):
+                # given
+                given = existing
+
+                # when
+                code, stdout, stderr, _, _ = run_main(args, given)
+
+                # then
+                self.assertEqual((code, stdout, stderr), (want_code, "", want_stderr))
 
 
 def stamp(commit, card):
@@ -612,14 +633,43 @@ class TestApplied(unittest.TestCase):
                 "marking finding applied: F3 is not decided\n",
                 existing,
             ),
+            (
+                "stamps both a commit and a card key",
+                ["applied", KEY, "F2", "--commit", "abc1234", "--card", "MPL-400"],
+                0,
+                "",
+                file(
+                    2,
+                    [
+                        stored("F1", decision=FIX_NOW, **maple),
+                        other_stored("F2", decision=fix_later, applied=stamp("abc1234", "MPL-400")),
+                        stored("F3"),
+                    ],
+                    resume=RESUME,
+                ),
+            ),
             ("unknown flag", ["applied", KEY, "F1", "--sha", "abc1234"], 2, USAGE, existing),
+            ("repeated flag", ["applied", KEY, "F1", "--commit", "abc1234", "--commit", "def5678"], 2, USAGE, existing),
+            ("flag without a value", ["applied", KEY, "F1", "--commit"], 2, USAGE, existing),
+            ("empty flag value", ["applied", KEY, "F1", "--commit", ""], 2, USAGE, existing),
+            ("no finding id", ["applied", KEY], 2, USAGE, existing),
+            ("commit is not hex", ["applied", KEY, "F1", "--commit", "abc$(id)"], 2, USAGE, existing),
+            ("commit is too short", ["applied", KEY, "F1", "--commit", "abc12"], 2, USAGE, existing),
+            ("commit is too long", ["applied", KEY, "F1", "--commit", "a" * 65], 2, USAGE, existing),
             ("bad card key", ["applied", KEY, "F2", "--card", "mpl-400"], 2, USAGE, existing),
         ]
 
-        for name, args, want_code, want_stderr, want_file in cases:
+        no_file = (
+            "no findings file",
+            ["applied", KEY, "F9", "--commit", "abc1234"],
+            1,
+            "marking finding applied: no finding F9\n",
+            None,
+        )
+        for name, args, want_code, want_stderr, want_file in [*cases, no_file]:
             with self.subTest(name):
                 # given
-                given = json.loads(json.dumps(existing))
+                given = None if want_file is None else json.loads(json.dumps(existing))
 
                 # when
                 code, _, stderr, saved, leftovers = run_main(args, given)

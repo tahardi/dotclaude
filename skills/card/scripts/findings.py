@@ -11,6 +11,7 @@ KEY = re.compile(r"\A[A-Z][A-Z0-9]*-\d+\Z")
 CLASS = re.compile(r"\A[a-z0-9-]{1,60}\Z")
 SOURCE = re.compile(r"\A(security-pass|agent-review|tool:[a-z0-9-]{1,40})\Z")
 NUMBERED = re.compile(r"\AF(\d+)\Z")
+COMMIT = re.compile(r"\A[0-9a-f]{7,64}\Z")
 CHIPS = {
     "costs-money",
     "leaks-credentials",
@@ -271,6 +272,8 @@ def applied_flags(args: list) -> dict:
     if set(flags) - {"--commit", "--card"} or len(flags) * 2 != len(args) or not all(flags.values()):
         usage()
     if "--card" in flags and not KEY.match(flags["--card"]):
+        usage()
+    if "--commit" in flags and not COMMIT.match(flags["--commit"]):
         usage()
     return flags
 

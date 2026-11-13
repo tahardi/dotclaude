@@ -215,6 +215,13 @@ def model_problems(model: dict) -> list:
             if component not in components:
                 found.append(f"attacker {attacker.get('id')} reaches unknown component {component}")
 
+    attackers = [attacker for attacker in entries(model, "attackers") if isinstance(attacker, dict)]
+
+    reaching = [attacker for attacker in attackers if isinstance(attacker.get("reaches"), list) and attacker["reaches"]]
+
+    if attackers and not reaching:
+        found.append("at least one attacker must reach a component")
+
     for boundary in entries(model, "boundaries"):
         if not isinstance(boundary, dict):
             continue

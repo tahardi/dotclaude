@@ -156,6 +156,11 @@ class TestProblems(unittest.TestCase):
                 + checking("boundary renderer-to-main is between unknown component main-process"),
             ),
             ("empty attackers", model(empty("attackers")), checking("attackers needs at least one entry")),
+            (
+                "no attacker reaches a component",
+                model(lambda d: d["attackers"][0].update(reaches=[])),
+                checking("at least one attacker must reach a component"),
+            ),
             ("empty boundaries", model(empty("boundaries")), checking("boundaries needs at least one entry")),
             ("empty users", model(empty("users")), checking("users needs at least one entry")),
             ("missing assets", model(lambda d: d.pop("assets")), checking("assets needs at least one entry")),
@@ -244,7 +249,8 @@ class TestProblems(unittest.TestCase):
             (
                 "reaches not a list",
                 model(lambda d: d["attackers"][0].update(reaches="ci")),
-                checking("attacker pr-author reaches must be a list"),
+                checking("attacker pr-author reaches must be a list")
+                + checking("at least one attacker must reach a component"),
             ),
             (
                 "duplicate id",

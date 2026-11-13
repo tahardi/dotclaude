@@ -110,6 +110,10 @@ def slow_show(command, **kwargs):
     return REAL_RUN(command, **kwargs)
 
 
+def no_git(command, **kwargs):
+    raise FileNotFoundError(2, "No such file or directory")
+
+
 class Unfiltered:
     def __eq__(self, other):
         if not isinstance(other, str):
@@ -382,24 +386,29 @@ class TestAtBase(unittest.TestCase):
         model_data = yaml.safe_load(model_text)
         security_data = yaml.safe_load(security_text)
         cases = [
-            ("reads both files", {MODEL: model_text, SECURITY: security_text}, (model_data, security_data), None),
-            ("missing model is None", {SECURITY: security_text}, (None, security_data), None),
-            ("missing security is None", {MODEL: model_text}, (model_data, None), None),
-            ("neither file", {}, (None, None), None),
-            ("enabled yes stays text", {SECURITY: "enabled: yes\n"}, (None, {"enabled": "yes"}), None),
-            ("bad model yaml", {MODEL: "assets: [\n"}, None, f"{MODEL}: "),
-            ("security not a mapping", {SECURITY: "true\n"}, None, f"{SECURITY}: "),
-            ("unknown base commit", {}, None, "base commit "),
-            ("git show times out", {}, None, f"{MODEL}: git show timed"),
+            (
+                "reads both files",
+                {MODEL: model_text, SECURITY: security_text},
+                None,
+                REAL_RUN,
+                (model_data, security_data),
+                None,
+            ),
+            ("missing model is None", {SECURITY: security_text}, None, REAL_RUN, (None, security_data), None),
+            ("missing security is None", {MODEL: model_text}, None, REAL_RUN, (model_data, None), None),
+            ("neither file", {}, None, REAL_RUN, (None, None), None),
+            ("enabled yes stays text", {SECURITY: "enabled: yes\n"}, None, REAL_RUN, (None, {"enabled": "yes"}), None),
+            ("bad model yaml", {MODEL: "assets: [\n"}, None, REAL_RUN, None, f"{MODEL}: "),
+            ("security not a mapping", {SECURITY: "true\n"}, None, REAL_RUN, None, f"{SECURITY}: "),
+            ("unknown base commit", {}, "0" * 40, REAL_RUN, None, "base commit "),
+            ("git show times out", {}, None, slow_show, None, f"{MODEL}: git show timed"),
+            ("git missing", {}, "0" * 40, no_git, None, f"base commit {'0' * 40}: running git: "),
         ]
 
-        for name, files, want, want_error in cases:
+        for name, files, base_override, run, want, want_error in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 # given
-                base = commit_files(directory, files)
-                if name == "unknown base commit":
-                    base = "0" * 40
-                run = slow_show if name == "git show times out" else REAL_RUN
+                base = base_override or commit_files(directory, files)
                 (Path(directory) / SECURITY).parent.mkdir(parents=True, exist_ok=True)
                 (Path(directory) / SECURITY).write_text("version: 1\nenabled: false\n")
                 got = None

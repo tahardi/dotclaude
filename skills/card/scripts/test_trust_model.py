@@ -388,7 +388,13 @@ class TestMain(unittest.TestCase):
                 0,
                 json.dumps(
                     [
-                        {"file": MODEL, "lines": ["+" + entry_line(sorted_keys(NEW_ACCEPTED))]},
+                        {
+                            "file": MODEL,
+                            "lines": [
+                                "+" + entry_line(sorted_keys(NEW_ACCEPTED)),
+                                "+" + entry_line(sorted_keys(NEW_OVERRIDE)),
+                            ],
+                        },
                         {"file": SECURITY, "lines": ["+" + entry_line(sorted_keys(NEW_TRACKED))]},
                     ]
                 )
@@ -396,9 +402,28 @@ class TestMain(unittest.TestCase):
                 "",
                 after=[
                     copy_templates,
-                    model(lambda data: data.update({"accepted": [NEW_ACCEPTED]})),
+                    model(lambda data: data.update({"accepted": [NEW_ACCEPTED], "overrides": [NEW_OVERRIDE]})),
                     security(lambda data: data.update({"tracked": [NEW_TRACKED]})),
                 ],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a new model not yet committed",
+                diff,
+                no_model,
+                0,
+                json.dumps([{"file": rel, "lines": ["uncommitted changes"]} for rel in (SECURITY, MODEL, MD)]) + "\n",
+                "",
+                after=[copy_templates],
+            ),
+            main_case(
+                "diff of a new model that is not a mapping",
+                diff,
+                no_model,
+                1,
+                "",
+                f"diffing trust model: {MODEL}: expected a mapping at the top level\n",
+                after=[copy_templates, write(MODEL, "true\n")],
                 commit_after=True,
             ),
             main_case(
@@ -915,6 +940,7 @@ def findings_file(*found):
 
 ACCEPTED = finding(decision=decision("accept-risk", "local only"))
 NEW_ACCEPTED = {"identity": CODE, "title": "Branch names reach a shell", "reason": "local only"}
+NEW_OVERRIDE = {"identity": CODE, "severity": "low", "title": "Branch names reach a shell"}
 NEW_TRACKED = {"identity": CODE, "title": "Branch names reach a shell", "card": None}
 OVERRIDDEN = finding(decision=decision("fix-now"), severityOverride="low")
 TRACKED = finding(
@@ -998,6 +1024,22 @@ class TestApply(unittest.TestCase):
                 1,
                 all_three,
                 f"writing trust model: {MODEL} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked security file stops with an error",
+                [link_outside(outside, SECURITY)],
+                1,
+                all_three,
+                f"writing trust model: {SECURITY} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked docs folder stops with an error",
+                [link_outside(outside, "docs/security")],
+                1,
+                all_three,
+                f"writing trust model: {MD} is a link or outside the worktree",
                 {},
             ),
             (

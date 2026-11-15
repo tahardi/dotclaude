@@ -13,7 +13,7 @@ import yaml
 
 import trust_model
 from findings import code_hash
-from trust_model import problems
+from trust_model import entry_line, problems
 
 TEMPLATES = Path(__file__).parent.parent / "trust-model"
 MD = "docs/security/trust-model.md"
@@ -316,8 +316,21 @@ class TestProblems(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
-def main_case(name, args, before, code, out, err, after=(), stored=None):
-    return name, args, before, list(after), stored, code, out, err
+def main_case(name, args, before, code, out, err, after=(), stored=None, commit_after=False, on_disk=()):
+    return name, args, before, list(after), commit_after, list(on_disk), stored, code, out, err
+
+
+def sorted_keys(entry):
+    return json.loads(json.dumps(entry, sort_keys=True))
+
+
+def link_outside(outside, rel):
+    def change(repo):
+        target = Path(tempfile.mkdtemp(dir=outside)) / Path(rel).name
+        shutil.move(repo / rel, target)
+        (repo / rel).symlink_to(target)
+
+    return change
 
 
 class TestMain(unittest.TestCase):
@@ -357,7 +370,63 @@ class TestMain(unittest.TestCase):
                 "",
             ),
             main_case("base without a sha", ["base"], [], 2, "", USAGE),
-            main_case("diff with no model at base", diff, no_model, 0, "[]\n", "", after=[copy_templates]),
+            main_case("diff with no model at base or head", diff, no_model, 0, "[]\n", ""),
+            main_case(
+                "diff of a new model with no exceptions",
+                diff,
+                no_model,
+                0,
+                "[]\n",
+                "",
+                after=[copy_templates],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a new model with exceptions",
+                diff,
+                no_model,
+                0,
+                json.dumps(
+                    [
+                        {"file": MODEL, "lines": ["+" + entry_line(sorted_keys(NEW_ACCEPTED))]},
+                        {"file": SECURITY, "lines": ["+" + entry_line(sorted_keys(NEW_TRACKED))]},
+                    ]
+                )
+                + "\n",
+                "",
+                after=[
+                    copy_templates,
+                    model(lambda data: data.update({"accepted": [NEW_ACCEPTED]})),
+                    security(lambda data: data.update({"tracked": [NEW_TRACKED]})),
+                ],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a committed edit put back on disk",
+                diff,
+                [],
+                0,
+                json.dumps(
+                    [
+                        {"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]},
+                        {"file": MODEL, "lines": ["uncommitted changes"]},
+                    ]
+                )
+                + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
+                on_disk=[replace(MODEL, "reaches: [ci, hook-server]", "reaches: [ci]")],
+            ),
+            main_case(
+                "diff of an uncommitted edit",
+                diff,
+                [],
+                0,
+                json.dumps([{"file": MODEL, "lines": ["uncommitted changes"]}]) + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+            ),
             main_case(
                 "diff of a hand edit to attackers",
                 diff,
@@ -367,6 +436,7 @@ class TestMain(unittest.TestCase):
                 + "\n",
                 "",
                 after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
             ),
             main_case(
                 "diff of a hand edit to a model marked binary",
@@ -377,6 +447,7 @@ class TestMain(unittest.TestCase):
                 + "\n",
                 "",
                 after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
             ),
             main_case(
                 "diff after apply",
@@ -387,6 +458,7 @@ class TestMain(unittest.TestCase):
                 "",
                 after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
                 stored=decided,
+                commit_after=True,
             ),
             main_case(
                 "diff with an unreadable findings file",
@@ -412,7 +484,7 @@ class TestMain(unittest.TestCase):
             main_case("apply with a bad card key", ["apply", "mpl"], [], 2, "", USAGE),
         ]
 
-        for name, args, before, after, stored, code, out, err in cases:
+        for name, args, before, after, commit_after, on_disk, stored, code, out, err in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as store:
                 # given
                 repo = Path(directory)
@@ -421,6 +493,10 @@ class TestMain(unittest.TestCase):
                     change(repo)
                 base = commit_files(directory, {})
                 for change in after:
+                    change(repo)
+                if commit_after:
+                    commit_files(directory, {})
+                for change in on_disk:
                     change(repo)
                 if stored is not None:
                     (Path(store) / "MPL-340.json").write_text(stored)
@@ -571,7 +647,21 @@ def printed(severity="high", title="Shell runs input"):
 
 class TestTrack(unittest.TestCase):
     def test_track(self):
+        outside = self.enterContext(tempfile.TemporaryDirectory())
         cases = [
+            (
+                "a linked security file stops with an error",
+                lambda repo: (
+                    write(SECURITY, "version: 1\nenabled: true\ntracked:\n")(repo),
+                    link_outside(outside, SECURITY)(repo),
+                ),
+                [issue()],
+                1,
+                None,
+                f"writing trust model: {SECURITY} is a link or outside the worktree\n",
+                "version: 1\nenabled: true\ntracked:\n",
+                os.replace,
+            ),
             (
                 "one identity twice gives one line",
                 "version: 1\nenabled: true\ntracked:\n",
@@ -744,6 +834,9 @@ class TestTrack(unittest.TestCase):
                 repo = Path(directory)
                 if before is not None:
                     (repo / SECURITY).parent.mkdir(parents=True)
+                if callable(before):
+                    before(repo)
+                elif before is not None:
                     (repo / SECURITY).write_text(before)
                 stdout, stderr = io.StringIO(), io.StringIO()
                 argv = ["trust_model.py", "track", directory]
@@ -821,6 +914,8 @@ def findings_file(*found):
 
 
 ACCEPTED = finding(decision=decision("accept-risk", "local only"))
+NEW_ACCEPTED = {"identity": CODE, "title": "Branch names reach a shell", "reason": "local only"}
+NEW_TRACKED = {"identity": CODE, "title": "Branch names reach a shell", "card": None}
 OVERRIDDEN = finding(decision=decision("fix-now"), severityOverride="low")
 TRACKED = finding(
     decision=decision("fix-later"),
@@ -895,7 +990,24 @@ class TestEntryLines(unittest.TestCase):
 class TestApply(unittest.TestCase):
     def test_apply(self):
         all_three = findings_file(ACCEPTED, {**OVERRIDDEN, "id": "F2"}, {**TRACKED, "id": "F3"})
+        outside = self.enterContext(tempfile.TemporaryDirectory())
         cases = [
+            (
+                "a linked model file stops with an error",
+                [link_outside(outside, MODEL)],
+                1,
+                all_three,
+                f"writing trust model: {MODEL} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked model folder stops with an error",
+                [link_outside(outside, ".maple")],
+                1,
+                all_three,
+                f"writing trust model: {MODEL} is a link or outside the worktree",
+                {},
+            ),
             (
                 "lines land under their key and heading",
                 [],

@@ -61,6 +61,105 @@ def check_trace(data):
     return found
 
 
+def lines_field(where, name, value):
+    found = text_field(where, name, value, 300)
+    if found:
+        return found
+    total = len(value.split("\n"))
+    return [f"{where}: {name} is {total} lines, want at most 3"] if total > 3 else []
+
+
+def check_example(data):
+    if not isinstance(data, dict):
+        return ["example is not an object"]
+    found = text_field("example", "lang", data.get("lang"), 40)
+    found += lines_field("example", "normal", data.get("normal"))
+    attack = data.get("attack")
+    more = lines_field("example", "attack", attack)
+    mark = data.get("mark")
+    if not isinstance(mark, str) or not mark:
+        more.append("example: mark is missing")
+    elif not more and mark not in attack:
+        more.append("example: mark is not part of attack")
+    return found + more
+
+
+def check_path(data):
+    if not isinstance(data, dict):
+        return ["path is not an object"]
+    steps = data.get("steps")
+    found = count("path", steps, "step", 2, 6)
+    if not isinstance(steps, list):
+        return found
+    zones = []
+    for n, step in enumerate(steps, 1):
+        where = f"path step {n}"
+        if not isinstance(step, dict):
+            found.append(f"{where}: is not an object")
+            continue
+        found += text_field(where, "actor", step.get("actor"), 40)
+        found += text_field(where, "step", step.get("step"), 120)
+        if "crosses" in step:
+            found += text_field(where, "crosses", step.get("crosses"), 60)
+        zone = step.get("zone")
+        more = text_field(where, "zone", zone, 40)
+        found += more
+        if more or (zones and zones[-1] == zone):
+            continue
+        if zone in zones:
+            found.append(f"{where}: zone {zone} was left earlier")
+        zones.append(zone)
+    if len(set(zones)) > 3:
+        found.append(f"path has {len(set(zones))} zones, want 1 to 3")
+    return found
+
+
+def check_reach(where, data):
+    if not isinstance(data, dict):
+        return [f"{where} is not an object"]
+    found = []
+    for name, least in (("now", 1), ("afterFix", 0)):
+        items = data.get(name)
+        more = count(where, items, f"{name} item", least, 4)
+        found += more
+        if not more:
+            for n, item in enumerate(items, 1):
+                found += text_field(where, f"{name} item {n}", item, 120)
+    return found
+
+
+def check_source(text):
+    sections = re.findall(r"^### Source[ \t]*\n(.*?)(?=^##|\Z)", text, re.M | re.S)
+    if len(sections) != 1:
+        return [f"found {len(sections)} Source sections, want 1"]
+    links = re.findall(r"\[([^\]]*)\]\(([^)]*)\)", sections[0])
+    if len(links) != 1:
+        return [f"Source has {len(links)} links, want 1"]
+    title, url = links[0]
+    found = text_field("Source", "title", title, 120)
+    if not re.fullmatch(r"https://\S+", url):
+        found.append("Source link is not an https URL")
+    return found
+
+
+def check_findings(text):
+    parts = re.split(r"^## Findings[ \t]*$", text, maxsplit=1, flags=re.M)
+    entries = re.split(r"^### ", parts[1], flags=re.M)[1:] if len(parts) == 2 else []
+    found = []
+    for n, entry in enumerate(entries, 1):
+        where = f"finding {n} reach"
+        reaches = blocks(entry, "maple-reach")
+        if len(reaches) > 1:
+            found.append(f"finding {n} has {len(reaches)} maple-reach blocks, want at most 1")
+            continue
+        for raw in reaches:
+            try:
+                found += check_reach(where, json.loads(raw))
+            except json.JSONDecodeError:
+                found.append(f"{where} block is not valid JSON")
+    return found
+
+
 def check_quiz(data):
     if not isinstance(data, dict):
         return ["quiz is not an object"]
@@ -82,9 +181,17 @@ def check_quiz(data):
             continue
         for c, choice in enumerate(choices, 1):
             found += text_field(where, f"choice {c}", choice, 200)
+        words = [len(c.split()) for c in choices if isinstance(c, str)]
+        if words and max(words) - min(words) > 3:
+            found.append(
+                f"{where}: choices are {min(words)} to {max(words)} words, want them within 3 of each other"
+            )
         answer = item.get("answer")
         if not is_int(answer) or not 0 <= answer < len(choices):
             found.append(f"{where}: answer {answer} is not a choice index ({len(choices)} choices)")
+    answers = [q.get("answer") for q in questions if isinstance(q, dict) and is_int(q.get("answer"))]
+    if len(questions) >= 3 and len(answers) == len(questions) and len(set(answers)) == 1:
+        found.append(f"quiz: every answer is {answers[0]}, want the right choice in different places")
     return found
 
 
@@ -92,7 +199,13 @@ def check(text):
     if not re.search(r"^## Lesson[ \t]*$", text, re.M):
         return []
     found = []
-    for kind, checker in (("maple-trace", check_trace), ("maple-quiz", check_quiz)):
+    kinds = (
+        ("maple-example", check_example),
+        ("maple-path", check_path),
+        ("maple-trace", check_trace),
+        ("maple-quiz", check_quiz),
+    )
+    for kind, checker in kinds:
         found_blocks = blocks(text, kind)
         if len(found_blocks) != 1:
             found.append(f"found {len(found_blocks)} {kind} blocks, want 1")
@@ -103,6 +216,8 @@ def check(text):
             found.append(f"{kind} block is not valid JSON")
             continue
         found += checker(data)
+    found += check_source(text)
+    found += check_findings(text)
     return [PREFIX + p for p in found]
 
 

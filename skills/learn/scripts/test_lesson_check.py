@@ -103,12 +103,43 @@ def steps_not_list(data):
     data["steps"] = {}
 
 
+def mark_not_in_attack(data):
+    data["mark"] = "&& curl"
+
+
+def four_line_attack(data):
+    data["attack"] = "a\nb\nc\nd"
+
+
+def zones_return(data):
+    data["steps"] = [
+        {"actor": "a", "step": "one", "zone": "A"},
+        {"actor": "b", "step": "two", "zone": "B"},
+        {"actor": "c", "step": "three", "zone": "A"},
+    ]
+
+
+def empty_now(data):
+    data["now"] = []
+
+
+def uneven_choices(data):
+    data["questions"][1]["choices"] = ["two words", "one two three four five six seven eight nine"]
+
+
+def same_answers(data):
+    data["questions"][1]["answer"] = 0
+
+
+SOURCE = "[OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)"
+
+
 class TestLessonCheck(unittest.TestCase):
     def test_check(self):
         cases = [
             ("happy path - lesson passes", ok(), []),
             ("happy path - no lesson passes", ok().split("## Lesson")[0] + "## Findings\n", []),
-            ("error - bad JSON", ok().replace('{"lang"', '{lang', 1),
+            ("error - bad JSON", ok().replace('{"lang":"typescript"', '{lang:"typescript"'),
              ["checking lesson: maple-trace block is not valid JSON"]),
             ("error - step past the end of the code", with_block("maple-trace", step_past_end),
              ["checking lesson: trace step 2: lines 4-9 are past the end of the code (5 lines)"]),
@@ -152,6 +183,26 @@ class TestLessonCheck(unittest.TestCase):
              ["checking lesson: quiz question 1: why is missing"]),
             ("error - steps is not a list", with_block("maple-trace", steps_not_list),
              ["checking lesson: trace: steps is not a list"]),
+            ("error - no example block", re.sub(r"```maple-example\n.*?\n```\n", "", ok(), flags=re.S),
+             ["checking lesson: found 0 maple-example blocks, want 1"]),
+            ("error - mark not in attack", with_block("maple-example", mark_not_in_attack),
+             ["checking lesson: example: mark is not part of attack"]),
+            ("error - attack of 4 lines", with_block("maple-example", four_line_attack),
+             ["checking lesson: example: attack is 4 lines, want at most 3"]),
+            ("error - path returns to a zone", with_block("maple-path", zones_return),
+             ["checking lesson: path step 3: zone A was left earlier"]),
+            ("error - no source", ok().replace("### Source\n\n" + SOURCE + "\n\n", ""),
+             ["checking lesson: found 0 Source sections, want 1"]),
+            ("error - two source links", ok().replace(SOURCE, SOURCE + "\n" + SOURCE),
+             ["checking lesson: Source has 2 links, want 1"]),
+            ("error - http source link", ok().replace("https://owasp", "http://owasp"),
+             ["checking lesson: Source link is not an https URL"]),
+            ("error - reach with empty now", with_block("maple-reach", empty_now),
+             ["checking lesson: finding 1 reach has 0 now items, want 1 to 4"]),
+            ("error - choices of 2 and 9 words", with_block("maple-quiz", uneven_choices),
+             ["checking lesson: quiz question 2: choices are 2 to 9 words, want them within 3 of each other"]),
+            ("error - every answer is 0", with_block("maple-quiz", same_answers),
+             ["checking lesson: quiz: every answer is 0, want the right choice in different places"]),
             ("error - block is a list", ok().replace(block(ok(), "maple-quiz"), "[]"),
              ["checking lesson: quiz is not an object"]),
         ]

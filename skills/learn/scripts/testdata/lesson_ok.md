@@ -13,9 +13,17 @@ grades: []
 
 Command injection happens when a program builds a shell command from text it did not write itself.
 
+```maple-example
+{"lang":"bash","normal":"git checkout main","attack":"git checkout main; rm -rf ~","mark":"; rm -rf ~"}
+```
+
 ### How an attack works
 
 An attacker who controls a branch name gets it into the command line, and the shell runs whatever follows a `;`.
+
+```maple-path
+{"steps":[{"actor":"anyone who can open a PR","step":"Names a branch with a shell command in it.","zone":"GitHub"},{"actor":"the CI runner","step":"Later: pastes the branch name into a shell command.","zone":"CI runner","crosses":"the branch name"}]}
+```
 
 ### Trace
 
@@ -26,8 +34,12 @@ An attacker who controls a branch name gets it into the command line, and the sh
 ### Quiz
 
 ```maple-quiz
-{"questions":[{"question":"What makes command injection possible?","choices":["Building a shell string from untrusted text","Using git","Long branch names"],"answer":0,"why":"The shell reads the text as code."},{"question":"Which call avoids the shell?","choices":["exec","execFile with an argument list"],"answer":1,"why":"execFile passes each argument to the program as is."},{"question":"Who is the attacker here?","choices":["Anyone who can name a branch","Only the repo owner"],"answer":0,"why":"Branch names come from anyone who opens a pull request."}]}
+{"questions":[{"question":"What makes command injection possible?","choices":["Untrusted text in shells","Using git at all","Very long branch names"],"answer":0,"why":"The shell reads the text as code."},{"question":"Which call avoids the shell?","choices":["exec with a string","execFile with an argument list"],"answer":1,"why":"execFile passes each argument to the program as is."},{"question":"Who is the attacker here?","choices":["Anyone who can name a branch","Only the repo owner"],"answer":0,"why":"Branch names come from anyone who opens a pull request."}]}
 ```
+
+### Source
+
+[OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)
 
 ## Findings
 
@@ -36,3 +48,7 @@ An attacker who controls a branch name gets it into the command line, and the sh
 - Code: `src/git.ts:4`
 
 The branch name goes into a shell string, the classic shape of command injection. Passing it to execFile as one argument defends it here.
+
+```maple-reach
+{"now":["Run any command on the CI runner."],"afterFix":[]}
+```

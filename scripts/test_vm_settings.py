@@ -55,6 +55,9 @@ class TestVmSettings(unittest.TestCase):
         ]:
             self.assertIs(sandbox[key], False, key)
         self.assertIs(sandbox["network"]["allowAllUnixSockets"], False)
+        self.assertIn("~/.local/state/maple/findings", sandbox["filesystem"]["allowWrite"])
+        for path in sandbox["filesystem"]["allowWrite"]:
+            self.assertFalse(path == "~/.xena" or path.startswith("~/.xena/"), path)
         self.assertNotIn("strictAllowlist", sandbox["network"])
         self.assertNotIn("allowManagedDomainsOnly", sandbox["network"])
         for key in [
@@ -86,7 +89,13 @@ class TestVmSettings(unittest.TestCase):
         self.assertEqual(settings["env"]["ENABLE_CLAUDEAI_MCP_SERVERS"], "false")
         for rule in deny:
             self.assertRegex(rule, r"^[A-Za-z]+\(.+\)$")
-        for rule in ["Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(git push --force*)", "Bash(git push * --force*)"]:
+        for rule in [
+            "Bash(rm -rf /*)",
+            "Bash(rm -rf ~*)",
+            "Bash(git push --force*)",
+            "Bash(git push * --force*)",
+            "Edit(//home/dev/.xena/**)",
+        ]:
             self.assertIn(rule, deny)
         self.assertEqual(set(hooks), {"UserPromptSubmit", "Stop", "Notification"})
         self.assertEqual(hooks["Notification"][0]["matcher"], "permission_prompt")

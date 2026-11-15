@@ -1282,6 +1282,7 @@ class TestDecisionsPath(unittest.TestCase):
 
 
 TRUSTED_IDENTITY = {"kind": "code", "class": "xss", "file": "a.ts", "hash": "0123456789abcdef"}
+FOLDER = object()
 TRUSTED_DECISION = {"kind": "accept-risk", "reason": "local only", "decidedAt": "2026-11-13T12:00:00.000Z"}
 
 
@@ -1332,6 +1333,36 @@ class TestTrustedDecisions(unittest.TestCase):
                 [],
                 trusted_file(trusted_finding(), trusted_finding(id="F2")),
             ),
+            (
+                "a record with the same identity but another id is ignored",
+                trusted_file(trusted_finding(id="F2")),
+                [record],
+                trusted_file(trusted_finding(id="F2")),
+            ),
+            (
+                "a record that is not an object is skipped",
+                trusted_file(trusted_finding()),
+                ["F1", None, record],
+                trusted_file(trusted_finding(decision=TRUSTED_DECISION, severityOverride="low")),
+            ),
+            (
+                "the first matching record wins",
+                trusted_file(trusted_finding()),
+                [record, {**record, "severityOverride": "medium"}],
+                trusted_file(trusted_finding(decision=TRUSTED_DECISION, severityOverride="low")),
+            ),
+            (
+                "the applied stamp from the findings file is kept",
+                trusted_file(trusted_finding(applied={"at": "now", "commit": None, "cardKey": "MPL-400"})),
+                [record],
+                trusted_file(
+                    trusted_finding(
+                        applied={"at": "now", "commit": None, "cardKey": "MPL-400"},
+                        decision=TRUSTED_DECISION,
+                        severityOverride="low",
+                    )
+                ),
+            ),
         ]
 
         for name, file_data, stored, want in cases:
@@ -1351,12 +1382,15 @@ class TestTrustedDecisions(unittest.TestCase):
             ("a list is read", json.dumps([{"id": "F1"}]), [{"id": "F1"}], None),
             ("bad JSON", "{", None, "reading decisions: MPL-1.json: not valid JSON"),
             ("not a list", json.dumps({"id": "F1"}), None, "reading decisions: MPL-1.json: not a decisions file"),
+            ("a folder in place of the file", FOLDER, None, "reading decisions: MPL-1.json: Is a directory"),
         ]
 
         for name, content, want, want_error in cases:
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 # given
-                if content is not None:
+                if content is FOLDER:
+                    (Path(directory) / "MPL-1.json").mkdir()
+                elif content is not None:
                     (Path(directory) / "MPL-1.json").write_text(content)
 
                 # when

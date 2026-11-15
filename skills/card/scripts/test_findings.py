@@ -79,6 +79,7 @@ def item(**changes):
         "defense": "defense text",
         "chips": ["runs-code"],
         **GLANCE,
+        "visual": VISUAL,
     }
     return {**base, **changes}
 
@@ -102,6 +103,7 @@ def stored(finding_id, code=CODE, file="src/x.ts", **changes):
         "defense": "defense text",
         "chips": ["runs-code"],
         **GLANCE,
+        "visual": VISUAL,
         "applied": None,
         "decision": None,
         "severityOverride": None,
@@ -280,7 +282,7 @@ class TestWrite(unittest.TestCase):
             (
                 "two inputs with one identity keep the first visual",
                 None,
-                [item(), item(visual=VISUAL), item(visual=OTHER_VISUAL)],
+                [item(), item(visual=OTHER_VISUAL)],
                 file(1, [stored("F1", visual=VISUAL)]),
                 {"round": 1, "ids": ["F1"], "dropped": 0},
             ),
@@ -289,13 +291,6 @@ class TestWrite(unittest.TestCase):
                 old_file([stored("F1", visual=OTHER_VISUAL)]),
                 [item(visual=VISUAL)],
                 file(2, [stored("F1", visual=VISUAL)]),
-                {"round": 2, "ids": ["F1"], "dropped": 0},
-            ),
-            (
-                "an undecided finding updated without a visual loses its old one",
-                old_file([stored("F1", visual=VISUAL)]),
-                [item()],
-                file(2, [stored("F1")]),
                 {"round": 2, "ids": ["F1"], "dropped": 0},
             ),
             (
@@ -677,6 +672,24 @@ class TestMain(unittest.TestCase):
                 None,
             ),
             (
+                "missing visual",
+                argv,
+                json.dumps([{key: value for key, value in item().items() if key != "visual"}]),
+                None,
+                1,
+                "reading findings input: item 1: missing visual\n",
+                None,
+            ),
+            (
+                "null visual",
+                argv,
+                json.dumps([item(visual=None)]),
+                None,
+                1,
+                "reading findings input: item 1 visual: is not an object\n",
+                None,
+            ),
+            (
                 "a visual without reach",
                 argv,
                 json.dumps([item(visual={"path": VISUAL["path"]})]),
@@ -686,12 +699,12 @@ class TestMain(unittest.TestCase):
                 None,
             ),
             (
-                "prose over 600 characters",
+                "prose over 300 characters",
                 argv,
-                json.dumps([item(what="x" * 601)]),
+                json.dumps([item(what="x" * 301)]),
                 None,
                 1,
-                "reading findings input: item 1: what is over 600 characters\n",
+                "reading findings input: item 1: what is over 300 characters\n",
                 None,
             ),
             (

@@ -531,6 +531,13 @@ def issue(severity="high", code='eval "$1"', title="Shell runs input"):
         "likelihood": "possible",
         "fixSize": "small",
         "recommend": {"decision": "fix-now", "why": "Quoting closes it."},
+        "visual": {
+            "path": [
+                {"actor": "a stranger", "step": "Opens a pull request.", "zone": "GitHub"},
+                {"actor": "the CI runner", "step": "Runs the input in a shell.", "zone": "CI runner"},
+            ],
+            "reach": {"now": ["Run any command on the CI runner."]},
+        },
     }
 
 

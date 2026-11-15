@@ -26,7 +26,7 @@ CHIPS = {
 }
 PROSE = ("what", "how", "impact", "defense")
 GLANCE = ("headline", "attacker", "likelihood", "fixSize", "recommend")
-REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips", *GLANCE)
+REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips", *GLANCE, "visual")
 LIKELIHOODS = ("likely", "possible", "unlikely")
 FIX_SIZES = ("small", "medium", "large")
 DECISIONS = ("fix-now", "fix-later", "accept-risk", "not-real")
@@ -169,7 +169,7 @@ def finding_of(value: object) -> dict:
         "severity": severity if severity in trust_model.SEVERITIES else "high",
         "sources": list(dict.fromkeys(sources)),
         "title": text(value["title"], "title", 120),
-        **{name: text(value[name], name, 600) for name in PROSE},
+        **{name: text(value[name], name, 300) for name in PROSE},
         "chips": list(dict.fromkeys(chips)),
         "headline": text(value["headline"], "headline", 160),
         "attacker": text(value["attacker"], "attacker", 60),
@@ -189,10 +189,10 @@ def parse(items: object) -> list:
         except ValueError as error:
             raise ValueError(f"item {number}: {error}") from error
         try:
-            visual = check_visual(value["visual"]) if value.get("visual") is not None else None
+            visual = check_visual(value["visual"])
         except ValueError as error:
             raise ValueError(MAP_GONE if str(error) == MAP_GONE else f"item {number} visual: {error}") from error
-        parsed.append(finding if visual is None else {**finding, "visual": visual})
+        parsed.append({**finding, "visual": visual})
     return parsed
 
 
@@ -218,8 +218,6 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
             combined[key]["sources"] = list(dict.fromkeys(sources))
             if finding["severity"] == "high":
                 combined[key]["severity"] = "high"
-            if "visual" in finding and "visual" not in combined[key]:
-                combined[key]["visual"] = finding["visual"]
         else:
             combined[key] = dict(finding)
 
@@ -230,8 +228,7 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
         undecided = [other for other in matches if other["decision"] is None]
         held = [other for other in matches if other["decision"] is not None and not refixed(other)]
         if undecided:
-            kept_fields = {name: field for name, field in undecided[0].items() if name != "visual"}
-            updated[undecided[0]["id"]] = {**kept_fields, **finding}
+            updated[undecided[0]["id"]] = {**undecided[0], **finding}
         elif not held:
             highest += 1
             new = {"id": f"F{highest}", **finding, "applied": None, "decision": None, "severityOverride": None}

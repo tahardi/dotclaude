@@ -41,8 +41,8 @@ entry heading, or a bullet. An entry with no paragraph under its bullets has no 
 2. **Read each finding** for every entry without a tie-in. The heading gives the card key and the id, such as
    `MPL-340` and `F3`. Only when the key matches `^[A-Z][A-Z0-9]*-\d+$` and the id matches `^F\d+$`, read the finding
    with that id from `$MAPLE_FINDINGS_DIR/<KEY>.json`, or `~/.config/maple/findings/<KEY>.json` when the variable is
-   unset. Use its `title`, `what`, `how`, `impact`, `defense`, and `visual`. If the file or the finding is gone, use the entry's
-   bullets and its PR. Only when the PR URL matches `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`,
+   unset. Use its `title`, `what`, `how`, `impact`, `defense`, and `visual`. If the file or the finding is gone, use
+   the entry's bullets and its PR. Only when the PR URL matches `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`,
    run `timeout 30 gh pr view '<url>'` and `timeout 60 gh pr diff '<url>'`, with the URL in single quotes. Otherwise,
    or with no PR, use the bullets alone.
 3. **Pick the work.** If the frontmatter has `comfortable: true`, skip to step 6. If the note already has

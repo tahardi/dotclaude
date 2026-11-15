@@ -59,6 +59,8 @@ entry heading, or a bullet. An entry with no paragraph under its bullets has no 
 7. **Check.** Make every change to this note with the Edit tool, and edit no other file. Then run
    `python3 ~/.claude/skills/learn/scripts/lesson_check.py <note>`. Fix the note until it exits 0 with no output.
 
+**Links and code walks:** a lesson may link only to `owasp.org`, `cwe.mitre.org`, or `portswigger.net` over https; Maple shows any other link as plain text. A `maple-trace` block is a teaching example and must never claim to be code from the repository.
+
 ## Trace block
 
 A short, self-contained sample modelled on the finding's code, walking the bad input through it. Nothing runs it.

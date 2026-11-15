@@ -103,12 +103,64 @@ def steps_not_list(data):
     data["steps"] = {}
 
 
+def mark_not_in_attack(data):
+    data["mark"] = "&& curl"
+
+
+def four_line_attack(data):
+    data["attack"] = "a\nb\nc\nd"
+
+
+def zones_return(data):
+    data["steps"] = [
+        {"actor": "a", "step": "one", "zone": "A"},
+        {"actor": "b", "step": "two", "zone": "B"},
+        {"actor": "c", "step": "three", "zone": "A"},
+    ]
+
+
+def four_zones(data):
+    data["steps"] = [{"actor": "a", "step": "s", "zone": z} for z in "ABCD"]
+
+
+def zone_repeats_in_a_row(data):
+    data["steps"] = [{"actor": "a", "step": "s", "zone": z} for z in "AAB"]
+
+
+def long_crosses(data):
+    data["steps"][1]["crosses"] = "x" * 61
+
+
+def no_mark(data):
+    del data["mark"]
+
+
+def three_words_apart(data):
+    data["questions"][1]["choices"] = ["two words", "one two three four five"]
+
+
+def empty_now(data):
+    data["now"] = []
+
+
+def uneven_choices(data):
+    data["questions"][1]["choices"] = ["two words", "one two three four five six seven eight nine"]
+
+
+def same_answers(data):
+    data["questions"][1]["answer"] = 0
+
+
+REACH = "```maple-reach\n" + '{"now":["Run any command on the CI runner."],"afterFix":[]}' + "\n```"
+SOURCE = "[OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)"
+
+
 class TestLessonCheck(unittest.TestCase):
     def test_check(self):
         cases = [
             ("happy path - lesson passes", ok(), []),
             ("happy path - no lesson passes", ok().split("## Lesson")[0] + "## Findings\n", []),
-            ("error - bad JSON", ok().replace('{"lang"', '{lang', 1),
+            ("error - bad JSON", ok().replace('{"lang":"typescript"', '{lang:"typescript"'),
              ["checking lesson: maple-trace block is not valid JSON"]),
             ("error - step past the end of the code", with_block("maple-trace", step_past_end),
              ["checking lesson: trace step 2: lines 4-9 are past the end of the code (5 lines)"]),
@@ -152,6 +204,41 @@ class TestLessonCheck(unittest.TestCase):
              ["checking lesson: quiz question 1: why is missing"]),
             ("error - steps is not a list", with_block("maple-trace", steps_not_list),
              ["checking lesson: trace: steps is not a list"]),
+            ("error - no example block", re.sub(r"```maple-example\n.*?\n```\n", "", ok(), flags=re.S),
+             ["checking lesson: found 0 maple-example blocks, want 1"]),
+            ("error - mark not in attack", with_block("maple-example", mark_not_in_attack),
+             ["checking lesson: example: mark is not part of attack"]),
+            ("error - attack of 4 lines", with_block("maple-example", four_line_attack),
+             ["checking lesson: example: attack is 4 lines, want at most 3"]),
+            ("error - path returns to a zone", with_block("maple-path", zones_return),
+             ["checking lesson: path step 3: zone A was left earlier"]),
+            ("error - no source", ok().replace("### Source\n\n" + SOURCE + "\n\n", ""),
+             ["checking lesson: found 0 Source sections, want 1"]),
+            ("error - two source links", ok().replace(SOURCE, SOURCE + "\n" + SOURCE),
+             ["checking lesson: Source has 2 links, want 1"]),
+            ("error - http source link", ok().replace("https://owasp", "http://owasp"),
+             ["checking lesson: Source link is not an https URL"]),
+            ("error - reach with empty now", with_block("maple-reach", empty_now),
+             ["checking lesson: finding 1 reach has 0 now items, want 1 to 4"]),
+            ("error - path with 4 zones", with_block("maple-path", four_zones),
+             ["checking lesson: path has 4 zones, want 1 to 3"]),
+            ("happy path - zone repeats in a row", with_block("maple-path", zone_repeats_in_a_row), []),
+            ("error - crosses too long", with_block("maple-path", long_crosses),
+             ["checking lesson: path step 2: crosses is 61 characters, want at most 60"]),
+            ("error - no mark", with_block("maple-example", no_mark),
+             ["checking lesson: example: mark is missing"]),
+            ("error - source title too long", ok().replace("[OWASP: Command Injection]", "[" + "x" * 121 + "]"),
+             ["checking lesson: Source: title is 121 characters, want at most 120"]),
+            ("error - two reach blocks", ok().replace(REACH, REACH + "\n\n" + REACH),
+             ["checking lesson: finding 1 has 2 maple-reach blocks, want at most 1"]),
+            ("error - bad reach with no lesson",
+             ok().split("## Lesson")[0] + "## Findings" + ok().split("## Findings")[1].replace('"now":[', '"now":[1,'),
+             ["checking lesson: finding 1 reach: now item 1 is missing"]),
+            ("happy path - choices 3 words apart", with_block("maple-quiz", three_words_apart), []),
+            ("error - choices of 2 and 9 words", with_block("maple-quiz", uneven_choices),
+             ["checking lesson: quiz question 2: choices are 2 to 9 words, want them within 3 of each other"]),
+            ("error - every answer is 0", with_block("maple-quiz", same_answers),
+             ["checking lesson: quiz: every answer is 0, want the right choice in different places"]),
             ("error - block is a list", ok().replace(block(ok(), "maple-quiz"), "[]"),
              ["checking lesson: quiz is not an object"]),
         ]

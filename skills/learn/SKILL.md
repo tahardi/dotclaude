@@ -89,16 +89,24 @@ When Taylor tells you something in the Learning tab, such as "I already know X",
 3. **Read each finding** for every entry without a tie-in. The heading gives the card key and the id, such as
    `MPL-340` and `F3`. Only when the key matches `^[A-Z][A-Z0-9]*-\d+$` and the id matches `^F\d+$`, read the finding
    with that id from `$MAPLE_FINDINGS_DIR/<KEY>.json`, or `~/.config/maple/findings/<KEY>.json` when the variable is
-   unset. Use its `title`, `what`, `how`, `impact`, and `defense`. If the file or the finding is gone, use the entry's
-   bullets and its PR. Only when the PR URL matches `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`,
-   run `timeout 30 gh pr view '<url>'` and `timeout 60 gh pr diff '<url>'`, with the URL in single quotes. Otherwise,
-   or with no PR, use the bullets alone.
-4. **Pick the work.** If the frontmatter has `comfortable: true`, or the note already has `## Lesson`, skip to step 7.
-5. **Write the lesson.** Insert `## Lesson` right before `## Findings`, with these four parts in order:
-   - `### What it is`: the kind of vulnerability in plain English. Explain every technical word you use.
-   - `### How an attack works`: who the attacker is, what they can reach, and what they do, step by step.
+   unset. Use its `title`, `what`, `how`, `impact`, `defense`, and `visual`. If the file or the finding is gone, use
+   the entry's bullets and its PR. Only when the PR URL matches
+   `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`, run `timeout 30 gh pr view '<url>'` and
+   `timeout 60 gh pr diff '<url>'`, with the URL in single quotes. Otherwise, or with no PR, use the bullets alone.
+4. **Pick the work.** If the frontmatter has `comfortable: true`, skip to step 7. If the note already has
+   `## Lesson`, upgrade it and skip to step 7: add a missing `maple-example` block under `### What it is`, a missing
+   `maple-path` block under `### How an attack works`, and a missing `### Source` section after `### Quiz`. Rewrite the
+   quiz only if it breaks a rule in "Quiz block". Keep each question at its index and change only its choices and
+   which choice is right, because Maple stores grades and reviews by question index. Leave every other part as it is.
+5. **Write the lesson.** Insert `## Lesson` right before `## Findings`, with these five parts in order. Each prose
+   part is two or three sentences.
+   - `### What it is`: the kind of vulnerability in plain English. Explain every technical word you use. Then one
+     `maple-example` block, described below.
+   - `### How an attack works`: who the attacker is, what they can reach, and what they do. Then one `maple-path`
+     block, described below.
    - `### Trace`: one `maple-trace` block, described below.
    - `### Quiz`: one `maple-quiz` block, described below.
+   - `### Source`: one link, described below.
 
    Use the glossary's terms for the ideas it covers, and define any other technical word the first time you use it.
    Start at the depth the learning records show: skip what Taylor has proved, and go over what Taylor got wrong.
@@ -106,10 +114,41 @@ When Taylor tells you something in the Learning tab, such as "I already know X",
    attestation, write the advanced lesson: explain the deeper mechanics, name a real-world attack of this kind, use
    more trace steps, and ask harder questions.
 7. **Write the tie-ins.** Under each entry's bullets that has no tie-in, leave a blank line and write 2 to 4 sentences
-   on how this finding is an instance of the class and what defends against it in this code.
+   on how this finding is an instance of the class and what defends against it in this code. When the finding has a
+   `visual.reach`, copy it into one `maple-reach` block under the tie-in, described below.
 8. **Check.** Make every change with the Edit or Write tool, and edit no file but this note, the glossary, and the
    learning records. Then run
    `python3 ~/.claude/skills/learn/scripts/lesson_check.py <note>`. Fix the note until it exits 0 with no output.
+
+## Example block
+
+A normal input and an attack input side by side, with the part that makes it an attack marked.
+
+````text
+```maple-example
+{"lang":"bash","normal":"git checkout main","attack":"git checkout main; rm -rf ~","mark":"; rm -rf ~"}
+```
+````
+
+- `lang`: the language, 40 characters at most.
+- `normal` and `attack`: 3 lines and 300 characters at most each, with lines joined by `\n`.
+- `mark`: the part of `attack` that makes it an attack, copied exactly from it.
+
+## Path block
+
+The attack as a short path of steps, in the shape of a finding's `visual.path`.
+
+````text
+```maple-path
+{"steps":[{"actor":"anyone who can open a PR","step":"Names a branch with a shell command in it.","zone":"GitHub"}]}
+```
+````
+
+- `steps`: 2 to 6 steps in order. `actor` is who acts, 40 characters at most. `step` is one short sentence, 120
+  characters at most.
+- `zone`: where the step runs, 40 characters at most. A path has 1 to 3 different zones and never goes back to a zone
+  it left.
+- `crosses`: optional, on the first step in a new zone: what passes into it, 60 characters at most.
 
 ## Trace block
 
@@ -139,3 +178,28 @@ Never copy a secret, token, or private value into it.
 - `question`: 300 characters at most. `choices`: 2 to 5, each 200 characters at most.
 - `answer`: the index of the right choice, counting from 0.
 - `why`: 600 characters at most, explaining the right answer.
+- Keep the choices fair: within a question, every choice's word count is within 3 of every other choice's, and the
+  right answers are not all at the same index.
+
+## Source
+
+````text
+### Source
+
+[OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)
+````
+
+- Exactly one Markdown link to one trusted page: OWASP, CWE, or the project's own docs. Never a reading list.
+- The title is 120 characters at most, and the URL starts with `https://`.
+
+## Reach block
+
+What an attacker can do today and after the fix, copied from the finding's `visual.reach`. At most one per finding.
+
+````text
+```maple-reach
+{"now":["Run any command on the CI runner."],"afterFix":[]}
+```
+````
+
+- `now`: 1 to 4 items. `afterFix`: 0 to 4 items. Each item is 120 characters at most.

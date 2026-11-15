@@ -501,7 +501,8 @@ def unexplained(diff_text: str, expected: set[str]) -> list[dict]:
 
 
 def findings_file(key: str) -> dict:
-    return findings.read_existing(findings.findings_path(key)) or {"card": key, "findings": []}
+    file = findings.read_existing(findings.findings_path(key)) or {"card": key, "findings": []}
+    return findings.trusted_decisions(file, findings.read_decisions(key))
 
 
 def uncommitted() -> list[dict]:

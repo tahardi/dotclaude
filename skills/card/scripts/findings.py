@@ -39,6 +39,49 @@ def findings_path(key: str) -> Path:
     return Path(folder) / f"{key}.json"
 
 
+def decisions_path(key: str) -> Path:
+    folder = os.environ.get("MAPLE_DECISIONS_DIR")
+    if not folder:
+        findings_dir = os.environ.get("MAPLE_FINDINGS_DIR") or os.path.expanduser("~/.config/maple/findings")
+        folder = str(Path(findings_dir).parent / "decisions")
+    return Path(folder) / f"{key}.json"
+
+
+def read_decisions(key: str) -> list:
+    path = decisions_path(key)
+    try:
+        raw = path.read_text()
+    except FileNotFoundError:
+        return []
+    except OSError as error:
+        raise ValueError(f"reading decisions: {path.name}: {error.strerror}") from error
+    try:
+        data = json.loads(raw)
+    except ValueError as error:
+        raise ValueError(f"reading decisions: {path.name}: not valid JSON") from error
+    if not isinstance(data, list):
+        raise ValueError(f"reading decisions: {path.name}: not a decisions file")
+    return data
+
+
+def trusted_decision(finding: dict, stored: list) -> dict:
+    record = next(
+        (
+            record
+            for record in stored
+            if isinstance(record, dict)
+            and record.get("id") == finding["id"]
+            and record.get("identity") == finding["identity"]
+        ),
+        {},
+    )
+    return {**finding, "decision": record.get("decision"), "severityOverride": record.get("severityOverride")}
+
+
+def trusted_decisions(file: dict, stored: list) -> dict:
+    return {**file, "findings": [trusted_decision(finding, stored) for finding in file["findings"]]}
+
+
 def code_hash(code: str) -> str:
     lines = [line.strip() for line in code.splitlines() if line.strip()]
     return hashlib.sha256("\n".join(lines).encode()).hexdigest()[:16]

@@ -1252,5 +1252,127 @@ class TestFindingsPath(unittest.TestCase):
         self.assertEqual(str(got), os.path.expanduser(f"~/.config/maple/findings/{KEY}.json"))
 
 
+class TestDecisionsPath(unittest.TestCase):
+    def test_decisions_path(self):
+        cases = [
+            (
+                "MAPLE_DECISIONS_DIR wins",
+                {"MAPLE_DECISIONS_DIR": "/d", "MAPLE_FINDINGS_DIR": "/c/findings"},
+                "/d/MPL-1.json",
+            ),
+            ("next to MAPLE_FINDINGS_DIR", {"MAPLE_FINDINGS_DIR": "/c/findings"}, "/c/decisions/MPL-1.json"),
+            ("default", {}, os.path.expanduser("~/.config/maple/decisions/MPL-1.json")),
+        ]
+
+        for name, env, want in cases:
+            with self.subTest(name):
+                # given
+                environ = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if key not in ("MAPLE_DECISIONS_DIR", "MAPLE_FINDINGS_DIR")
+                }
+
+                # when
+                with mock.patch.dict(os.environ, {**environ, **env}, clear=True):
+                    got = findings.decisions_path("MPL-1")
+
+                # then
+                self.assertEqual(str(got), want)
+
+
+TRUSTED_IDENTITY = {"kind": "code", "class": "xss", "file": "a.ts", "hash": "0123456789abcdef"}
+TRUSTED_DECISION = {"kind": "accept-risk", "reason": "local only", "decidedAt": "2026-11-13T12:00:00.000Z"}
+
+
+def trusted_finding(**changes):
+    return {
+        "id": "F1",
+        "identity": TRUSTED_IDENTITY,
+        "applied": None,
+        "decision": None,
+        "severityOverride": None,
+        **changes,
+    }
+
+
+def trusted_file(*found):
+    return {"version": 1, "round": 1, "card": "MPL-1", "findings": list(found)}
+
+
+class TestTrustedDecisions(unittest.TestCase):
+    def test_trusted_decisions(self):
+        record = {"id": "F1", "identity": TRUSTED_IDENTITY, "decision": TRUSTED_DECISION, "severityOverride": "low"}
+        other_identity = {**TRUSTED_IDENTITY, "hash": "fedcba9876543210"}
+        cases = [
+            (
+                "a matching record supplies the decision and override",
+                trusted_file(trusted_finding()),
+                [record],
+                trusted_file(trusted_finding(decision=TRUSTED_DECISION, severityOverride="low")),
+            ),
+            (
+                "a decision only in the findings file is dropped",
+                trusted_file(trusted_finding(decision=TRUSTED_DECISION, severityOverride="low")),
+                [],
+                trusted_file(trusted_finding()),
+            ),
+            (
+                "a record with the same id but another identity is ignored",
+                trusted_file(trusted_finding(identity=other_identity, decision=TRUSTED_DECISION)),
+                [record],
+                trusted_file(trusted_finding(identity=other_identity)),
+            ),
+            (
+                "no records clears every decision",
+                trusted_file(
+                    trusted_finding(decision=TRUSTED_DECISION),
+                    trusted_finding(id="F2", decision=TRUSTED_DECISION, severityOverride="medium"),
+                ),
+                [],
+                trusted_file(trusted_finding(), trusted_finding(id="F2")),
+            ),
+        ]
+
+        for name, file_data, stored, want in cases:
+            with self.subTest(name):
+                # given
+                given = json.loads(json.dumps(file_data))
+
+                # when
+                got = findings.trusted_decisions(given, stored)
+
+                # then
+                self.assertEqual(got, want)
+
+    def test_read_decisions(self):
+        cases = [
+            ("missing file gives no decisions", None, [], None),
+            ("a list is read", json.dumps([{"id": "F1"}]), [{"id": "F1"}], None),
+            ("bad JSON", "{", None, "reading decisions: MPL-1.json: not valid JSON"),
+            ("not a list", json.dumps({"id": "F1"}), None, "reading decisions: MPL-1.json: not a decisions file"),
+        ]
+
+        for name, content, want, want_error in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                # given
+                if content is not None:
+                    (Path(directory) / "MPL-1.json").write_text(content)
+
+                # when
+                with mock.patch.dict(os.environ, {"MAPLE_DECISIONS_DIR": directory}):
+                    if want_error is None:
+                        got = findings.read_decisions("MPL-1")
+                    else:
+                        with self.assertRaises(ValueError) as raised:
+                            findings.read_decisions("MPL-1")
+
+                # then
+                if want_error is None:
+                    self.assertEqual(got, want)
+                else:
+                    self.assertEqual(str(raised.exception), want_error)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -25,7 +25,12 @@ CHIPS = {
     "supply-chain",
 }
 PROSE = ("what", "how", "impact", "defense")
-REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips")
+GLANCE = ("headline", "attacker", "likelihood", "fixSize", "recommend")
+REQUIRED = ("severity", "identity", "line", "sources", "title", *PROSE, "chips", *GLANCE, "visual")
+LIKELIHOODS = ("likely", "possible", "unlikely")
+FIX_SIZES = ("small", "medium", "large")
+DECISIONS = ("fix-now", "fix-later", "accept-risk", "not-real")
+MAP_GONE = "visual.map is no longer accepted"
 USAGE = "usage: findings.py write KEY --head SHA [--base SHA] | read KEY | applied KEY ID [--commit SHA] [--card KEY]"
 
 
@@ -77,31 +82,26 @@ def items_of(value: object, name: str, low: int, high: int, what: str) -> list:
 
 def path_of(value: object) -> list:
     steps = []
+    zones: list[str] = []
     for number, entry in enumerate(items_of(value, "path", 2, 6, "steps"), start=1):
         if not isinstance(entry, dict):
             raise ValueError(f"path step {number} is not an object")
-        steps.append(
-            {
-                "actor": text(entry.get("actor"), f"path step {number} actor", 40),
-                "step": text(entry.get("step"), f"path step {number} step", 120),
-            }
-        )
+        zone = text(entry.get("zone"), f"path step {number} zone", 40)
+        if not zones or zone != zones[-1]:
+            if zone in zones:
+                raise ValueError(f"path returns to zone {zone}")
+            if len(zones) == 3:
+                raise ValueError("path has more than 3 zones")
+            zones.append(zone)
+        step = {
+            "actor": text(entry.get("actor"), f"path step {number} actor", 40),
+            "step": text(entry.get("step"), f"path step {number} step", 120),
+            "zone": zone,
+        }
+        if entry.get("crosses") is not None:
+            step["crosses"] = text(entry["crosses"], f"path step {number} crosses", 60)
+        steps.append(step)
     return steps
-
-
-def map_of(value: object) -> dict:
-    if not isinstance(value, dict):
-        raise ValueError("map is not an object")
-    zones = [text(zone, "map zone", 40) for zone in items_of(value.get("zones"), "map zones", 2, 6, "names")]
-    for zone in zones:
-        if zones.count(zone) > 1:
-            raise ValueError(f"map zones repeat {zone}")
-    for end in ("from", "to"):
-        if value.get(end) not in zones:
-            raise ValueError(f"map {end} is not one of the zones")
-    if value["from"] == value["to"]:
-        raise ValueError("map from and to are the same zone")
-    return {"zones": zones, "from": value["from"], "to": value["to"]}
 
 
 def reach_of(value: object) -> dict:
@@ -115,12 +115,30 @@ def reach_of(value: object) -> dict:
     }
 
 
-def check_visual(visual: dict) -> dict | None:
+def check_visual(visual: dict) -> dict:
     if not isinstance(visual, dict):
         raise ValueError("is not an object")
-    parts = {"path": path_of, "map": map_of, "reach": reach_of}
-    checked = {name: check(visual[name]) for name, check in parts.items() if visual.get(name) is not None}
-    return checked or None
+    if "map" in visual:
+        raise ValueError(MAP_GONE)
+    for name in ("path", "reach"):
+        if visual.get(name) is None:
+            raise ValueError(f"missing {name}")
+    return {"path": path_of(visual["path"]), "reach": reach_of(visual["reach"])}
+
+
+def one_of(value: object, name: str, allowed: tuple) -> str:
+    if value not in allowed:
+        raise ValueError(f"{name} is not {', '.join(allowed[:-1])}, or {allowed[-1]}")
+    return value
+
+
+def recommend_of(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("recommend is not an object")
+    return {
+        "decision": one_of(value.get("decision"), "recommend decision", DECISIONS),
+        "why": text(value.get("why"), "recommend why", 200),
+    }
 
 
 def finding_of(value: object) -> dict:
@@ -151,8 +169,13 @@ def finding_of(value: object) -> dict:
         "severity": severity if severity in trust_model.SEVERITIES else "high",
         "sources": list(dict.fromkeys(sources)),
         "title": text(value["title"], "title", 120),
-        **{name: text(value[name], name, 600) for name in PROSE},
+        **{name: text(value[name], name, 300) for name in PROSE},
         "chips": list(dict.fromkeys(chips)),
+        "headline": text(value["headline"], "headline", 160),
+        "attacker": text(value["attacker"], "attacker", 60),
+        "likelihood": one_of(value["likelihood"], "likelihood", LIKELIHOODS),
+        "fixSize": one_of(value["fixSize"], "fixSize", FIX_SIZES),
+        "recommend": recommend_of(value["recommend"]),
     }
 
 
@@ -166,10 +189,10 @@ def parse(items: object) -> list:
         except ValueError as error:
             raise ValueError(f"item {number}: {error}") from error
         try:
-            visual = check_visual(value["visual"]) if value.get("visual") is not None else None
+            visual = check_visual(value["visual"])
         except ValueError as error:
-            raise ValueError(f"item {number} visual: {error}") from error
-        parsed.append(finding if visual is None else {**finding, "visual": visual})
+            raise ValueError(MAP_GONE if str(error) == MAP_GONE else f"item {number} visual: {error}") from error
+        parsed.append({**finding, "visual": visual})
     return parsed
 
 
@@ -195,8 +218,6 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
             combined[key]["sources"] = list(dict.fromkeys(sources))
             if finding["severity"] == "high":
                 combined[key]["severity"] = "high"
-            if "visual" in finding and "visual" not in combined[key]:
-                combined[key]["visual"] = finding["visual"]
         else:
             combined[key] = dict(finding)
 
@@ -207,8 +228,7 @@ def merge(existing: dict | None, incoming: list, head: str, now: str) -> dict:
         undecided = [other for other in matches if other["decision"] is None]
         held = [other for other in matches if other["decision"] is not None and not refixed(other)]
         if undecided:
-            kept_fields = {name: field for name, field in undecided[0].items() if name != "visual"}
-            updated[undecided[0]["id"]] = {**kept_fields, **finding}
+            updated[undecided[0]["id"]] = {**undecided[0], **finding}
         elif not held:
             highest += 1
             new = {"id": f"F{highest}", **finding, "applied": None, "decision": None, "severityOverride": None}

@@ -35,13 +35,34 @@ CODE_IDENTITY = {"kind": "code", "class": "command-injection", "file": "src/x.ts
 DEPENDENCY_IDENTITY = {"kind": "dependency", "advisory": "GHSA-1", "package": "lodash"}
 VISUAL = {
     "path": [
-        {"actor": "a stranger on the internet", "step": "Opens a pull request with a crafted branch name."},
-        {"actor": "the build server", "step": "Runs the branch name as part of a shell command."},
+        {
+            "actor": "a stranger on the internet",
+            "step": "Opens a pull request with a crafted branch name.",
+            "zone": "the internet",
+        },
+        {
+            "actor": "the build server",
+            "step": "Runs the branch name as part of a shell command.",
+            "zone": "the build server",
+            "crosses": "the branch name",
+        },
     ],
-    "map": {"zones": ["the internet", "the build server"], "from": "the internet", "to": "the build server"},
     "reach": {"now": ["Run any command on the build server."], "afterFix": []},
 }
-OTHER_VISUAL = {"reach": {"now": ["Read the deploy token."], "afterFix": ["Nothing."]}}
+OTHER_VISUAL = {
+    "path": [
+        {"actor": "a teammate", "step": "Runs the deploy script.", "zone": "the build server"},
+        {"actor": "the deploy script", "step": "Prints the deploy token to the log.", "zone": "the build server"},
+    ],
+    "reach": {"now": ["Read the deploy token."], "afterFix": ["Nothing."]},
+}
+GLANCE = {
+    "headline": "Anyone who opens a pull request can run commands on the build server.",
+    "attacker": "anyone who can open a pull request",
+    "likelihood": "likely",
+    "fixSize": "small",
+    "recommend": {"decision": "fix-now", "why": "One quoted argument closes it."},
+}
 
 
 def item(**changes):
@@ -57,6 +78,8 @@ def item(**changes):
         "impact": "impact text",
         "defense": "defense text",
         "chips": ["runs-code"],
+        **GLANCE,
+        "visual": VISUAL,
     }
     return {**base, **changes}
 
@@ -79,6 +102,8 @@ def stored(finding_id, code=CODE, file="src/x.ts", **changes):
         "impact": "impact text",
         "defense": "defense text",
         "chips": ["runs-code"],
+        **GLANCE,
+        "visual": VISUAL,
         "applied": None,
         "decision": None,
         "severityOverride": None,
@@ -228,9 +253,36 @@ class TestWrite(unittest.TestCase):
                 {"round": 1, "ids": ["F1", "F2"], "dropped": 0},
             ),
             (
-                "two inputs with one identity keep the first non-empty visual",
+                "a valid input stores the five glance fields unchanged",
                 None,
-                [item(), item(visual={}), item(visual=VISUAL), item(visual=OTHER_VISUAL)],
+                [
+                    item(
+                        headline="h" * 160,
+                        attacker="a" * 60,
+                        likelihood="unlikely",
+                        fixSize="large",
+                        recommend={"decision": "not-real", "why": "w" * 200},
+                    )
+                ],
+                file(
+                    1,
+                    [
+                        stored(
+                            "F1",
+                            headline="h" * 160,
+                            attacker="a" * 60,
+                            likelihood="unlikely",
+                            fixSize="large",
+                            recommend={"decision": "not-real", "why": "w" * 200},
+                        )
+                    ],
+                ),
+                {"round": 1, "ids": ["F1"], "dropped": 0},
+            ),
+            (
+                "two inputs with one identity keep the first visual",
+                None,
+                [item(), item(visual=OTHER_VISUAL)],
                 file(1, [stored("F1", visual=VISUAL)]),
                 {"round": 1, "ids": ["F1"], "dropped": 0},
             ),
@@ -239,13 +291,6 @@ class TestWrite(unittest.TestCase):
                 old_file([stored("F1", visual=OTHER_VISUAL)]),
                 [item(visual=VISUAL)],
                 file(2, [stored("F1", visual=VISUAL)]),
-                {"round": 2, "ids": ["F1"], "dropped": 0},
-            ),
-            (
-                "an undecided finding updated without a visual loses its old one",
-                old_file([stored("F1", visual=VISUAL)]),
-                [item()],
-                file(2, [stored("F1")]),
                 {"round": 2, "ids": ["F1"], "dropped": 0},
             ),
             (
@@ -290,12 +335,19 @@ def security_with(**changes):
     return {**yaml.safe_load((TEMPLATES / "security.yaml").read_text()), **changes}
 
 
-def step(actor="a stranger on the internet", text="Opens a pull request."):
-    return {"actor": actor, "step": text}
+def step(actor="a stranger on the internet", text="Opens a pull request.", zone="a", **changes):
+    return {"actor": actor, "step": text, "zone": zone, **changes}
 
 
-def zones_map(zones, start="a", end="b"):
-    return {"map": {"zones": zones, "from": start, "to": end}}
+REACH = {"now": ["Run code."], "afterFix": []}
+
+
+def visual(path=None, reach=None, **changes):
+    return {"path": path or [step(), step()], "reach": reach or REACH, **changes}
+
+
+def zoned(*zones):
+    return visual([step(zone=zone) for zone in zones])
 
 
 class TestCheckVisual(unittest.TestCase):
@@ -305,90 +357,106 @@ class TestCheckVisual(unittest.TestCase):
             (
                 "unknown keys are dropped",
                 {
-                    "path": [{**step(), "color": "red"}, step()],
-                    "map": {"zones": ["a", "b"], "from": "a", "to": "b", "arrow": "thick"},
+                    "path": [{**step(), "color": "red"}, step(crosses="x")],
                     "reach": {"now": ["Run code."], "afterFix": [], "later": ["x"]},
                     "chart": "pie",
                 },
-                {
-                    "path": [step(), step()],
-                    "map": {"zones": ["a", "b"], "from": "a", "to": "b"},
-                    "reach": {"now": ["Run code."], "afterFix": []},
-                },
+                visual([step(), step(crosses="x")]),
                 None,
             ),
-            ("an empty object returns None", {}, None, None),
-            ("one part alone is kept", OTHER_VISUAL, OTHER_VISUAL, None),
-            ("one path step", {"path": [step()]}, None, "path is not a list of 2 to 6 steps"),
-            ("seven path steps", {"path": [step()] * 7}, None, "path is not a list of 2 to 6 steps"),
+            ("an empty object", {}, None, "missing path"),
+            ("a visual without a path", {"reach": REACH}, None, "missing path"),
+            ("a visual without reach", {"path": [step(), step()]}, None, "missing reach"),
+            ("null parts", {"path": None, "reach": None}, None, "missing path"),
+            (
+                "a visual with a map",
+                visual(map={"zones": ["a", "b"], "from": "a", "to": "b"}),
+                None,
+                "visual.map is no longer accepted",
+            ),
+            ("one path step", visual([step()]), None, "path is not a list of 2 to 6 steps"),
+            ("seven path steps", visual([step()] * 7), None, "path is not a list of 2 to 6 steps"),
             (
                 "a 41-character actor",
-                {"path": [step(), step(actor="a" * 41)]},
+                visual([step(), step(actor="a" * 41)]),
                 None,
                 "path step 2 actor is over 40 characters",
             ),
             (
                 "a 121-character step",
-                {"path": [step(text="a" * 121), step()]},
+                visual([step(text="a" * 121), step()]),
                 None,
                 "path step 1 step is over 120 characters",
             ),
-            ("one zone", zones_map(["a"]), None, "map zones is not a list of 2 to 6 names"),
-            ("a repeated zone", zones_map(["a", "b", "a"]), None, "map zones repeat a"),
-            ("from equal to to", zones_map(["a", "b"], end="a"), None, "map from and to are the same zone"),
-            ("from not in zones", zones_map(["a", "b"], start="c"), None, "map from is not one of the zones"),
+            (
+                "a path step without a zone",
+                visual([step(), {"actor": "a stranger", "step": "Opens a PR."}]),
+                None,
+                "path step 2 zone is not a non-empty string",
+            ),
+            ("a 41-character zone", zoned("a", "b" * 41), None, "path step 2 zone is over 40 characters"),
+            ("zones a, b, c pass", zoned("a", "b", "c"), zoned("a", "b", "c"), None),
+            ("a zone held over steps passes", zoned("a", "a", "b", "b"), zoned("a", "a", "b", "b"), None),
+            ("zones a, b, a", zoned("a", "b", "a"), None, "path returns to zone a"),
+            ("four distinct zones", zoned("a", "b", "c", "d"), None, "path has more than 3 zones"),
+            (
+                "a 61-character crosses",
+                visual([step(), step(zone="b", crosses="x" * 61)]),
+                None,
+                "path step 2 crosses is over 60 characters",
+            ),
+            (
+                "an empty crosses",
+                visual([step(), step(zone="b", crosses=" ")]),
+                None,
+                "path step 2 crosses is not a non-empty string",
+            ),
+            ("a null crosses is left out", visual([step(), step(crosses=None)]), visual(), None),
             (
                 "an empty now",
-                {"reach": {"now": [], "afterFix": []}},
+                visual(reach={"now": [], "afterFix": []}),
                 None,
                 "reach now is not a list of 1 to 4 items",
             ),
             (
                 "five afterFix items",
-                {"reach": {"now": ["Run code."], "afterFix": ["x"] * 5}},
+                visual(reach={"now": ["Run code."], "afterFix": ["x"] * 5}),
                 None,
                 "reach afterFix is not a list of 0 to 4 items",
             ),
             ("not an object", ["path"], None, "is not an object"),
-            ("only unknown keys returns None", {"chart": "pie"}, None, None),
-            ("only null parts returns None", {"path": None, "map": None, "reach": None}, None, None),
             (
                 "a missing afterFix is stored as empty",
-                {"reach": {"now": ["Run code."]}},
-                {"reach": {"now": ["Run code."], "afterFix": []}},
+                visual(reach={"now": ["Run code."]}),
+                visual(),
                 None,
             ),
-            ("to not in zones", zones_map(["a", "b"], end="c"), None, "map to is not one of the zones"),
-            ("a path step that is not an object", {"path": [step(), "x"]}, None, "path step 2 is not an object"),
-            ("a map that is not an object", {"map": ["a", "b"]}, None, "map is not an object"),
-            ("a reach that is not an object", {"reach": ["x"]}, None, "reach is not an object"),
-            ("a zone that is not a string", zones_map(["a", 2]), None, "map zone is not a non-empty string"),
-            ("an empty zone", zones_map(["a", " "]), None, "map zone is not a non-empty string"),
-            ("a 41-character zone", zones_map(["a", "b" * 41]), None, "map zone is over 40 characters"),
+            ("a path step that is not an object", visual([step(), "x"]), None, "path step 2 is not an object"),
+            ("a reach that is not an object", visual(reach=["x"]), None, "reach is not an object"),
             (
                 "a reach item that is not a string",
-                {"reach": {"now": [3]}},
+                visual(reach={"now": [3]}),
                 None,
                 "reach now item is not a non-empty string",
             ),
             (
                 "an empty afterFix item",
-                {"reach": {"now": ["Run code."], "afterFix": [""]}},
+                visual(reach={"now": ["Run code."], "afterFix": [""]}),
                 None,
                 "reach afterFix item is not a non-empty string",
             ),
             (
                 "a 121-character reach item",
-                {"reach": {"now": ["a" * 121]}},
+                visual(reach={"now": ["a" * 121]}),
                 None,
                 "reach now item is over 120 characters",
             ),
         ]
 
-        for name, visual, want, want_error in cases:
+        for name, given_visual, want, want_error in cases:
             with self.subTest(name):
                 # given
-                given = json.loads(json.dumps(visual))
+                given = json.loads(json.dumps(given_visual))
 
                 # when
                 if want_error is None:
@@ -506,19 +574,137 @@ class TestMain(unittest.TestCase):
             (
                 "bad visual",
                 argv,
-                json.dumps([item(), item(visual={"path": [{"actor": "a stranger", "step": "Opens a PR."}]})]),
+                json.dumps([item(), item(visual={**VISUAL, "path": VISUAL["path"][:1]})]),
                 None,
                 1,
                 "reading findings input: item 2 visual: path is not a list of 2 to 6 steps\n",
                 None,
             ),
             (
-                "prose over 600 characters",
+                "missing headline",
                 argv,
-                json.dumps([item(what="x" * 601)]),
+                json.dumps([{key: value for key, value in item().items() if key != "headline"}]),
                 None,
                 1,
-                "reading findings input: item 1: what is over 600 characters\n",
+                "reading findings input: item 1: missing headline\n",
+                None,
+            ),
+            (
+                "missing attacker",
+                argv,
+                json.dumps([{key: value for key, value in item().items() if key != "attacker"}]),
+                None,
+                1,
+                "reading findings input: item 1: missing attacker\n",
+                None,
+            ),
+            (
+                "headline over 160 characters",
+                argv,
+                json.dumps([item(headline="x" * 161)]),
+                None,
+                1,
+                "reading findings input: item 1: headline is over 160 characters\n",
+                None,
+            ),
+            (
+                "attacker over 60 characters",
+                argv,
+                json.dumps([item(attacker="x" * 61)]),
+                None,
+                1,
+                "reading findings input: item 1: attacker is over 60 characters\n",
+                None,
+            ),
+            (
+                "likelihood maybe",
+                argv,
+                json.dumps([item(likelihood="maybe")]),
+                None,
+                1,
+                "reading findings input: item 1: likelihood is not likely, possible, or unlikely\n",
+                None,
+            ),
+            (
+                "fixSize huge",
+                argv,
+                json.dumps([item(fixSize="huge")]),
+                None,
+                1,
+                "reading findings input: item 1: fixSize is not small, medium, or large\n",
+                None,
+            ),
+            (
+                "recommend not an object",
+                argv,
+                json.dumps([item(recommend="fix-now")]),
+                None,
+                1,
+                "reading findings input: item 1: recommend is not an object\n",
+                None,
+            ),
+            (
+                "recommend decision ignore",
+                argv,
+                json.dumps([item(recommend={"decision": "ignore", "why": "w"})]),
+                None,
+                1,
+                "reading findings input: item 1: recommend decision is not "
+                "fix-now, fix-later, accept-risk, or not-real\n",
+                None,
+            ),
+            (
+                "recommend why over 200 characters",
+                argv,
+                json.dumps([item(recommend={"decision": "fix-now", "why": "w" * 201})]),
+                None,
+                1,
+                "reading findings input: item 1: recommend why is over 200 characters\n",
+                None,
+            ),
+            (
+                "a visual with a map",
+                argv,
+                json.dumps([item(visual={**VISUAL, "map": {"zones": ["a", "b"], "from": "a", "to": "b"}})]),
+                None,
+                1,
+                "reading findings input: visual.map is no longer accepted\n",
+                None,
+            ),
+            (
+                "missing visual",
+                argv,
+                json.dumps([{key: value for key, value in item().items() if key != "visual"}]),
+                None,
+                1,
+                "reading findings input: item 1: missing visual\n",
+                None,
+            ),
+            (
+                "null visual",
+                argv,
+                json.dumps([item(visual=None)]),
+                None,
+                1,
+                "reading findings input: item 1 visual: is not an object\n",
+                None,
+            ),
+            (
+                "a visual without reach",
+                argv,
+                json.dumps([item(visual={"path": VISUAL["path"]})]),
+                None,
+                1,
+                "reading findings input: item 1 visual: missing reach\n",
+                None,
+            ),
+            (
+                "prose over 300 characters",
+                argv,
+                json.dumps([item(what="x" * 301)]),
+                None,
+                1,
+                "reading findings input: item 1: what is over 300 characters\n",
                 None,
             ),
             (

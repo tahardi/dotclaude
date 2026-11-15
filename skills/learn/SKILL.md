@@ -43,8 +43,8 @@ entry heading, or a bullet. An entry with no paragraph under its bullets has no 
    with that id from `$MAPLE_FINDINGS_DIR/<KEY>.json`, or `~/.config/maple/findings/<KEY>.json` when the variable is
    unset. Use its `title`, `what`, `how`, `impact`, `defense`, and `visual`. If the file or the finding is gone, use
    the entry's bullets and its PR. Only when the PR URL matches
-   `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`, run `timeout 30 gh pr view '<url>'` and `timeout 60 gh pr diff '<url>'`, with the URL in single quotes. Otherwise,
-   or with no PR, use the bullets alone.
+   `^https://github\.com/tahardi/[A-Za-z0-9_.-]+/pull/\d+$`, run `timeout 30 gh pr view '<url>'` and
+   `timeout 60 gh pr diff '<url>'`, with the URL in single quotes. Otherwise, or with no PR, use the bullets alone.
 3. **Pick the work.** If the frontmatter has `comfortable: true`, skip to step 6. If the note already has
    `## Lesson`, upgrade it and skip to step 6: add a missing `maple-example` block under `### What it is`, a missing
    `maple-path` block under `### How an attack works`, and a missing `### Source` section after `### Quiz`. Rewrite the

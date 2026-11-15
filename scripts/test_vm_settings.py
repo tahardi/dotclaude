@@ -56,8 +56,13 @@ class TestVmSettings(unittest.TestCase):
             self.assertIs(sandbox[key], False, key)
         self.assertIs(sandbox["network"]["allowAllUnixSockets"], False)
         self.assertIn("~/.local/state/maple/findings", sandbox["filesystem"]["allowWrite"])
+        xena = "/home/dev/.xena"
         for path in sandbox["filesystem"]["allowWrite"]:
-            self.assertFalse(path == "~/.xena" or path.startswith("~/.xena/"), path)
+            full = path.replace("~", "/home/dev", 1).rstrip("/") or "/"
+            self.assertFalse(
+                full == xena or full.startswith(xena + "/") or xena.startswith(full.rstrip("/") + "/"),
+                f"writing Xena state through {path}",
+            )
         self.assertNotIn("strictAllowlist", sandbox["network"])
         self.assertNotIn("allowManagedDomainsOnly", sandbox["network"])
         for key in [

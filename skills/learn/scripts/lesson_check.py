@@ -197,7 +197,7 @@ def check_quiz(data):
 
 def check(text):
     if not re.search(r"^## Lesson[ \t]*$", text, re.M):
-        return []
+        return [PREFIX + p for p in check_findings(text)]
     found = []
     kinds = (
         ("maple-example", check_example),

@@ -119,6 +119,26 @@ def zones_return(data):
     ]
 
 
+def four_zones(data):
+    data["steps"] = [{"actor": "a", "step": "s", "zone": z} for z in "ABCD"]
+
+
+def zone_repeats_in_a_row(data):
+    data["steps"] = [{"actor": "a", "step": "s", "zone": z} for z in "AAB"]
+
+
+def long_crosses(data):
+    data["steps"][1]["crosses"] = "x" * 61
+
+
+def no_mark(data):
+    del data["mark"]
+
+
+def three_words_apart(data):
+    data["questions"][1]["choices"] = ["two words", "one two three four five"]
+
+
 def empty_now(data):
     data["now"] = []
 
@@ -131,6 +151,7 @@ def same_answers(data):
     data["questions"][1]["answer"] = 0
 
 
+REACH = "```maple-reach\n" + '{"now":["Run any command on the CI runner."],"afterFix":[]}' + "\n```"
 SOURCE = "[OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)"
 
 
@@ -199,6 +220,21 @@ class TestLessonCheck(unittest.TestCase):
              ["checking lesson: Source link is not an https URL"]),
             ("error - reach with empty now", with_block("maple-reach", empty_now),
              ["checking lesson: finding 1 reach has 0 now items, want 1 to 4"]),
+            ("error - path with 4 zones", with_block("maple-path", four_zones),
+             ["checking lesson: path has 4 zones, want 1 to 3"]),
+            ("happy path - zone repeats in a row", with_block("maple-path", zone_repeats_in_a_row), []),
+            ("error - crosses too long", with_block("maple-path", long_crosses),
+             ["checking lesson: path step 2: crosses is 61 characters, want at most 60"]),
+            ("error - no mark", with_block("maple-example", no_mark),
+             ["checking lesson: example: mark is missing"]),
+            ("error - source title too long", ok().replace("[OWASP: Command Injection]", "[" + "x" * 121 + "]"),
+             ["checking lesson: Source: title is 121 characters, want at most 120"]),
+            ("error - two reach blocks", ok().replace(REACH, REACH + "\n\n" + REACH),
+             ["checking lesson: finding 1 has 2 maple-reach blocks, want at most 1"]),
+            ("error - bad reach with no lesson",
+             ok().split("## Lesson")[0] + "## Findings" + ok().split("## Findings")[1].replace('"now":[', '"now":[1,'),
+             ["checking lesson: finding 1 reach: now item 1 is missing"]),
+            ("happy path - choices 3 words apart", with_block("maple-quiz", three_words_apart), []),
             ("error - choices of 2 and 9 words", with_block("maple-quiz", uneven_choices),
              ["checking lesson: quiz question 2: choices are 2 to 9 words, want them within 3 of each other"]),
             ("error - every answer is 0", with_block("maple-quiz", same_answers),

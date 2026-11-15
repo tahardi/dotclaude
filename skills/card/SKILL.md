@@ -326,12 +326,15 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
    Pass.
 6. Raise every edit to the model files. From the worktree, run
    `python3 ~/.claude/skills/card/scripts/trust_model.py diff KEY --base <base>`. It prints `[{"file", "lines"}]`: the
-   lines changed in the three model files that are not entries recorded from this card's decisions. It prints `[]` when
-   the base has no model. Turn each file it lists into one `decide` finding:
+   lines changed in the three model files between the base and the latest commit that are not entries recorded from
+   this card's decisions. When the base has no model, it lists every accepted risk, severity override, and tracked
+   entry in the new model instead. It also lists each model file with uncommitted changes, with the one line
+   `uncommitted changes`. Turn each entry it lists into one `decide` finding:
    - identity `{"kind": "code", "class": "trust-model-change", "file": <file>, "code": <its lines joined by newlines>}`,
      `line` `null`, `sources` `["security-pass"]`, chips `["bypasses-access"]`;
    - severity `high` when the edit removes or narrows anything, adds an `accepted`, `overrides`, or `tracked` entry, or
-     turns security off, and `medium` otherwise;
+     turns security off, when it lists a new model's entries, or when the file has uncommitted changes, and `medium`
+     otherwise;
    - prose that says in plain words what changed, and that a weaker model hides findings on later cards;
    - the glance fields and `visual` written as in step 2, with the edit as the first step of the path.
 

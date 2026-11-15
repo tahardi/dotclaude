@@ -526,6 +526,11 @@ def issue(severity="high", code='eval "$1"', title="Shell runs input"):
         "impact": "i",
         "defense": "d",
         "chips": ["runs-code"],
+        "headline": "Anyone can run a shell command.",
+        "attacker": "anyone who can open a pull request",
+        "likelihood": "possible",
+        "fixSize": "small",
+        "recommend": {"decision": "fix-now", "why": "Quoting closes it."},
     }
 
 

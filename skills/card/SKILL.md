@@ -499,7 +499,8 @@ Run this after a merge or a close. The made-up cards from step 8 are only for ha
 ### Finishing a Merged Card
 
 Run this when the card's PR, from "Finding a card's PR", has state `MERGED`. If `jira.py get KEY` shows the card is
-already `Done`, its merge was finished before: run only steps 1, 2, and 7.
+already `Done`, its merge was finished before: run only steps 1 and 2, then comment on the card with each decision and
+what was recorded for it, and report only those to the user. Skip the comment when there were no decisions.
 
 1. Run `gh pr view <number> --json mergedBy --jq .mergedBy.login` and `gh repo view --json owner --jq .owner.login`.
    If they differ, tell the user someone else merged it, and stop.
@@ -514,8 +515,8 @@ already `Done`, its merge was finished before: run only steps 1, 2, and 7.
 3. Remove the worktree and the local and remote branch. Run each command as its own bare Bash call from the main repo
    root, as in "Review Round" step 4, and never pass `--force`. If the worktree has uncommitted changes, stop and tell
    the user.
-   - `git worktree remove <worktree path>`, then `git worktree prune`.
-   - `git branch -D <branch>`.
+   - If the worktree path exists, `git worktree remove <worktree path>`. Then `git worktree prune`.
+   - If `git branch --list <branch>` prints anything, `git branch -D <branch>`.
    - If `git ls-remote --heads origin <branch>` prints anything, `git push origin --delete <branch>`.
 
    Confirm both branches are gone with `git branch --list <branch>` and `git ls-remote --heads origin <branch>`.

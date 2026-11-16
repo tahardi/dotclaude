@@ -309,8 +309,17 @@ def save(path: Path, text: str) -> None:
         temp.unlink(missing_ok=True)
 
 
+def model_path(repo: Path, rel: str) -> Path:
+    path = repo / rel
+
+    if path.is_symlink() or not path.resolve().is_relative_to(repo.resolve()):
+        raise ValueError(f"writing trust model: {rel} is a link or outside the worktree")
+
+    return path
+
+
 def track(repo: Path, inputs: list[dict]) -> list[dict]:
-    path = repo / SECURITY
+    path = model_path(repo, SECURITY)
 
     if not path.is_file():
         raise ValueError(f"reading trust model: {SECURITY} is missing")
@@ -444,7 +453,9 @@ def insert(rel: str, text: str, section: str, new: list[str], markdown: bool) ->
 
 
 def apply(repo: Path, file: dict) -> int:
-    if not (repo / MODEL).is_file():
+    paths = {rel: model_path(repo, rel) for rel in (MD, MODEL, SECURITY)}
+
+    if not paths[MODEL].is_file():
         return 0
 
     added = 0
@@ -453,10 +464,10 @@ def apply(repo: Path, file: dict) -> int:
     for key, new in entry_lines(file).items():
         rel, section = key.split(":", 1)
 
-        if rel not in texts and not (repo / rel).is_file():
+        if rel not in texts and not paths[rel].is_file():
             continue
 
-        text = texts.get(rel) or (repo / rel).read_text()
+        text = texts.get(rel) or paths[rel].read_text()
         present = set(text.splitlines())
         missing = [line for line in dict.fromkeys(new) if line not in present]
 
@@ -465,7 +476,7 @@ def apply(repo: Path, file: dict) -> int:
             added += len(missing)
 
     for rel, text in texts.items():
-        (repo / rel).write_text(text)
+        paths[rel].write_text(text)
 
     return added
 
@@ -490,7 +501,37 @@ def unexplained(diff_text: str, expected: set[str]) -> list[dict]:
 
 
 def findings_file(key: str) -> dict:
-    return findings.read_existing(findings.findings_path(key)) or {"card": key, "findings": []}
+    file = findings.read_existing(findings.findings_path(key)) or {"card": key, "findings": []}
+    return findings.trusted_decisions(file, findings.read_decisions(key))
+
+
+def uncommitted() -> list[dict]:
+    args = ["status", "--porcelain", "--untracked-files=all", "--no-renames", "--", MD, MODEL, SECURITY]
+    result = git(args, "diffing trust model")
+
+    if result.returncode != 0:
+        raise ValueError(f"diffing trust model: {' '.join(result.stderr.split())}")
+
+    return [{"file": line[3:], "lines": ["uncommitted changes"]} for line in result.stdout.splitlines()]
+
+
+def new_model_exceptions() -> list[dict]:
+    found = []
+
+    for rel, read, keys in ((MODEL, read_model, ("accepted", "overrides")), (SECURITY, read_security, ("tracked",))):
+        text = show("HEAD", rel)
+
+        try:
+            data = {} if text is None else read(text)
+        except (yaml.YAMLError, ValueError) as error:
+            raise ValueError(f"diffing trust model: {rel}: {' '.join(str(error).split())}") from error
+
+        lines = ["+" + entry_line(entry) for key in keys for entry in entries(data, key)]
+
+        if lines:
+            found.append({"file": rel, "lines": lines})
+
+    return found
 
 
 def model_diff(key: str, base: str) -> list[dict]:
@@ -498,7 +539,7 @@ def model_diff(key: str, base: str) -> list[dict]:
         raise ValueError(f"base commit {base} is not in this repo")
 
     if show(base, MODEL) is None:
-        return []
+        return new_model_exceptions() + uncommitted()
 
     expected = {line for lines in entry_lines(findings_file(key)).values() for line in lines}
     flags = [
@@ -511,12 +552,12 @@ def model_diff(key: str, base: str) -> list[dict]:
         "--src-prefix=a/",
         "--dst-prefix=b/",
     ]
-    result = git(["diff", *flags, base, "--", MD, MODEL, SECURITY], "diffing trust model")
+    result = git(["diff", *flags, base, "HEAD", "--", MD, MODEL, SECURITY], "diffing trust model")
 
     if result.returncode != 0:
         raise ValueError(f"diffing trust model: {' '.join(result.stderr.split())}")
 
-    return unexplained(result.stdout, expected)
+    return unexplained(result.stdout, expected) + uncommitted()
 
 
 def usage() -> None:

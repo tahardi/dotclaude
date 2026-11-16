@@ -178,7 +178,8 @@
       "allowWrite": [
         "~/Documents/code",
         "~/.cache",
-        "~/go"
+        "~/go",
+        "~/.local/state/maple/findings"
       ]
     },
     "network": {

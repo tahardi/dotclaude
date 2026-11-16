@@ -120,6 +120,8 @@ When Taylor tells you something in the Learning tab, such as "I already know X",
    learning records. Then run
    `python3 ~/.claude/skills/learn/scripts/lesson_check.py <note>`. Fix the note until it exits 0 with no output.
 
+**Links and code walks:** a lesson may link only to `owasp.org`, `cwe.mitre.org`, or `portswigger.net` over https; Maple shows any other link as plain text. A `maple-trace` block is a teaching example and must never claim to be code from the repository.
+
 ## Example block
 
 A normal input and an attack input side by side, with the part that makes it an attack marked.
@@ -189,7 +191,7 @@ Never copy a secret, token, or private value into it.
 [OWASP: Command Injection](https://owasp.org/www-community/attacks/Command_Injection)
 ````
 
-- Exactly one Markdown link to one trusted page: OWASP, CWE, or the project's own docs. Never a reading list.
+- Exactly one Markdown link to one trusted page on `owasp.org`, `cwe.mitre.org`, or `portswigger.net`. Never a reading list.
 - The title is 120 characters at most, and the URL starts with `https://`.
 
 ## Reach block

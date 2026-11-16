@@ -13,7 +13,7 @@ import yaml
 
 import trust_model
 from findings import code_hash
-from trust_model import problems
+from trust_model import entry_line, problems
 
 TEMPLATES = Path(__file__).parent.parent / "trust-model"
 MD = "docs/security/trust-model.md"
@@ -316,13 +316,39 @@ class TestProblems(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
-def main_case(name, args, before, code, out, err, after=(), stored=None):
-    return name, args, before, list(after), stored, code, out, err
+def main_case(
+    name,
+    args,
+    before,
+    code,
+    out,
+    err,
+    after=(),
+    stored=None,
+    commit_after=False,
+    on_disk=(),
+    decided=None,
+):
+    return name, args, before, list(after), commit_after, list(on_disk), stored, decided, code, out, err
+
+
+def sorted_keys(entry):
+    return json.loads(json.dumps(entry, sort_keys=True))
+
+
+def link_outside(outside, rel):
+    def change(repo):
+        target = Path(tempfile.mkdtemp(dir=outside)) / Path(rel).name
+        shutil.move(repo / rel, target)
+        (repo / rel).symlink_to(target)
+
+    return change
 
 
 class TestMain(unittest.TestCase):
     def test_main(self):
         decided = json.dumps(findings_file(ACCEPTED))
+        recorded = json.dumps([MAPLE_RECORD])
         no_model = [remove(MD), remove(MODEL), remove(SECURITY)]
         diff = ["diff", "MPL-340", "--base", "BASE"]
         cases = [
@@ -357,7 +383,88 @@ class TestMain(unittest.TestCase):
                 "",
             ),
             main_case("base without a sha", ["base"], [], 2, "", USAGE),
-            main_case("diff with no model at base", diff, no_model, 0, "[]\n", "", after=[copy_templates]),
+            main_case("diff with no model at base or head", diff, no_model, 0, "[]\n", ""),
+            main_case(
+                "diff of a new model with no exceptions",
+                diff,
+                no_model,
+                0,
+                "[]\n",
+                "",
+                after=[copy_templates],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a new model with exceptions",
+                diff,
+                no_model,
+                0,
+                json.dumps(
+                    [
+                        {
+                            "file": MODEL,
+                            "lines": [
+                                "+" + entry_line(sorted_keys(NEW_ACCEPTED)),
+                                "+" + entry_line(sorted_keys(NEW_OVERRIDE)),
+                            ],
+                        },
+                        {"file": SECURITY, "lines": ["+" + entry_line(sorted_keys(NEW_TRACKED))]},
+                    ]
+                )
+                + "\n",
+                "",
+                after=[
+                    copy_templates,
+                    model(lambda data: data.update({"accepted": [NEW_ACCEPTED], "overrides": [NEW_OVERRIDE]})),
+                    security(lambda data: data.update({"tracked": [NEW_TRACKED]})),
+                ],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a new model not yet committed",
+                diff,
+                no_model,
+                0,
+                json.dumps([{"file": rel, "lines": ["uncommitted changes"]} for rel in (SECURITY, MODEL, MD)]) + "\n",
+                "",
+                after=[copy_templates],
+            ),
+            main_case(
+                "diff of a new model that is not a mapping",
+                diff,
+                no_model,
+                1,
+                "",
+                f"diffing trust model: {MODEL}: expected a mapping at the top level\n",
+                after=[copy_templates, write(MODEL, "true\n")],
+                commit_after=True,
+            ),
+            main_case(
+                "diff of a committed edit put back on disk",
+                diff,
+                [],
+                0,
+                json.dumps(
+                    [
+                        {"file": MODEL, "lines": ["-    reaches: [ci]", "+    reaches: [ci, hook-server]"]},
+                        {"file": MODEL, "lines": ["uncommitted changes"]},
+                    ]
+                )
+                + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
+                on_disk=[replace(MODEL, "reaches: [ci, hook-server]", "reaches: [ci]")],
+            ),
+            main_case(
+                "diff of an uncommitted edit",
+                diff,
+                [],
+                0,
+                json.dumps([{"file": MODEL, "lines": ["uncommitted changes"]}]) + "\n",
+                "",
+                after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+            ),
             main_case(
                 "diff of a hand edit to attackers",
                 diff,
@@ -367,6 +474,7 @@ class TestMain(unittest.TestCase):
                 + "\n",
                 "",
                 after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
             ),
             main_case(
                 "diff of a hand edit to a model marked binary",
@@ -377,6 +485,7 @@ class TestMain(unittest.TestCase):
                 + "\n",
                 "",
                 after=[replace(MODEL, "reaches: [ci]", "reaches: [ci, hook-server]")],
+                commit_after=True,
             ),
             main_case(
                 "diff after apply",
@@ -387,6 +496,19 @@ class TestMain(unittest.TestCase):
                 "",
                 after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
                 stored=decided,
+                commit_after=True,
+                decided=recorded,
+            ),
+            main_case(
+                "diff raises an entry whose decision is only in the findings file",
+                diff,
+                [],
+                0,
+                APPLIED_LINES,
+                "",
+                after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
+                stored=decided,
+                commit_after=True,
             ),
             main_case(
                 "diff with an unreadable findings file",
@@ -398,6 +520,26 @@ class TestMain(unittest.TestCase):
                 stored="{",
             ),
             main_case(
+                "diff with an unreadable decisions file",
+                diff,
+                [],
+                1,
+                "",
+                "reading decisions: MPL-340.json: not valid JSON\n",
+                stored=decided,
+                decided="{",
+            ),
+            main_case(
+                "apply with an unreadable decisions file",
+                ["apply", "MPL-340"],
+                [],
+                1,
+                "",
+                "reading decisions: MPL-340.json: not valid JSON\n",
+                stored=decided,
+                decided="{",
+            ),
+            main_case(
                 "diff with an unknown base",
                 ["diff", "MPL-340", "--base", "0" * 40],
                 [],
@@ -407,13 +549,27 @@ class TestMain(unittest.TestCase):
             ),
             main_case("diff with a bad card key", ["diff", "nope", "--base", "BASE"], [], 2, "", USAGE),
             main_case("diff without a base", ["diff", "MPL-340"], [], 2, "", USAGE),
-            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided),
+            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided, decided=recorded),
+            main_case(
+                "apply ignores a decision only in the findings file",
+                ["apply", "MPL-340"],
+                [],
+                0,
+                '{"added": 0}\n',
+                "",
+                stored=decided,
+            ),
             main_case("apply with no findings file", ["apply", "MPL-340"], [], 0, '{"added": 0}\n', ""),
             main_case("apply with a bad card key", ["apply", "mpl"], [], 2, "", USAGE),
         ]
 
-        for name, args, before, after, stored, code, out, err in cases:
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as store:
+        for name, args, before, after, commit_after, on_disk, stored, decided_by_maple, code, out, err in cases:
+            with (
+                self.subTest(name),
+                tempfile.TemporaryDirectory() as directory,
+                tempfile.TemporaryDirectory() as store,
+                tempfile.TemporaryDirectory() as decisions,
+            ):
                 # given
                 repo = Path(directory)
                 copy_templates(repo)
@@ -422,15 +578,21 @@ class TestMain(unittest.TestCase):
                 base = commit_files(directory, {})
                 for change in after:
                     change(repo)
+                if commit_after:
+                    commit_files(directory, {})
+                for change in on_disk:
+                    change(repo)
                 if stored is not None:
                     (Path(store) / "MPL-340.json").write_text(stored)
+                if decided_by_maple is not None:
+                    (Path(decisions) / "MPL-340.json").write_text(decided_by_maple)
                 argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
                 stdout, stderr = io.StringIO(), io.StringIO()
 
                 # when
                 with (
                     contextlib.chdir(directory),
-                    mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": store}),
+                    mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": store, "MAPLE_DECISIONS_DIR": decisions}),
                     mock.patch("sys.argv", argv),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
@@ -526,6 +688,18 @@ def issue(severity="high", code='eval "$1"', title="Shell runs input"):
         "impact": "i",
         "defense": "d",
         "chips": ["runs-code"],
+        "headline": "Anyone can run a shell command.",
+        "attacker": "anyone who can open a pull request",
+        "likelihood": "possible",
+        "fixSize": "small",
+        "recommend": {"decision": "fix-now", "why": "Quoting closes it."},
+        "visual": {
+            "path": [
+                {"actor": "a stranger", "step": "Opens a pull request.", "zone": "GitHub"},
+                {"actor": "the CI runner", "step": "Runs the input in a shell.", "zone": "CI runner"},
+            ],
+            "reach": {"now": ["Run any command on the CI runner."]},
+        },
     }
 
 
@@ -559,7 +733,21 @@ def printed(severity="high", title="Shell runs input"):
 
 class TestTrack(unittest.TestCase):
     def test_track(self):
+        outside = self.enterContext(tempfile.TemporaryDirectory())
         cases = [
+            (
+                "a linked security file stops with an error",
+                lambda repo: (
+                    write(SECURITY, "version: 1\nenabled: true\ntracked:\n")(repo),
+                    link_outside(outside, SECURITY)(repo),
+                ),
+                [issue()],
+                1,
+                None,
+                f"writing trust model: {SECURITY} is a link or outside the worktree\n",
+                "version: 1\nenabled: true\ntracked:\n",
+                os.replace,
+            ),
             (
                 "one identity twice gives one line",
                 "version: 1\nenabled: true\ntracked:\n",
@@ -732,6 +920,9 @@ class TestTrack(unittest.TestCase):
                 repo = Path(directory)
                 if before is not None:
                     (repo / SECURITY).parent.mkdir(parents=True)
+                if callable(before):
+                    before(repo)
+                elif before is not None:
                     (repo / SECURITY).write_text(before)
                 stdout, stderr = io.StringIO(), io.StringIO()
                 argv = ["trust_model.py", "track", directory]
@@ -809,10 +1000,19 @@ def findings_file(*found):
 
 
 ACCEPTED = finding(decision=decision("accept-risk", "local only"))
+NEW_ACCEPTED = {"identity": CODE, "title": "Branch names reach a shell", "reason": "local only"}
+NEW_OVERRIDE = {"identity": CODE, "severity": "low", "title": "Branch names reach a shell"}
+NEW_TRACKED = {"identity": CODE, "title": "Branch names reach a shell", "card": None}
 OVERRIDDEN = finding(decision=decision("fix-now"), severityOverride="low")
 TRACKED = finding(
     decision=decision("fix-later"),
     applied={"at": DECIDED_AT, "commit": None, "cardKey": "MPL-400"},
+)
+
+
+MAPLE_RECORD = {"id": "F1", "identity": CODE, "decision": ACCEPTED["decision"], "severityOverride": None}
+APPLIED_LINES = (
+    json.dumps([{"file": MODEL, "lines": ["+" + ACCEPTED_LINE]}, {"file": MD, "lines": ["+" + ACCEPTED_BULLET]}]) + "\n"
 )
 
 
@@ -883,7 +1083,40 @@ class TestEntryLines(unittest.TestCase):
 class TestApply(unittest.TestCase):
     def test_apply(self):
         all_three = findings_file(ACCEPTED, {**OVERRIDDEN, "id": "F2"}, {**TRACKED, "id": "F3"})
+        outside = self.enterContext(tempfile.TemporaryDirectory())
         cases = [
+            (
+                "a linked model file stops with an error",
+                [link_outside(outside, MODEL)],
+                1,
+                all_three,
+                f"writing trust model: {MODEL} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked security file stops with an error",
+                [link_outside(outside, SECURITY)],
+                1,
+                all_three,
+                f"writing trust model: {SECURITY} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked docs folder stops with an error",
+                [link_outside(outside, "docs/security")],
+                1,
+                all_three,
+                f"writing trust model: {MD} is a link or outside the worktree",
+                {},
+            ),
+            (
+                "a linked model folder stops with an error",
+                [link_outside(outside, ".maple")],
+                1,
+                all_three,
+                f"writing trust model: {MODEL} is a link or outside the worktree",
+                {},
+            ),
             (
                 "lines land under their key and heading",
                 [],

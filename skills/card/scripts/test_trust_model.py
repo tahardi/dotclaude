@@ -316,8 +316,20 @@ class TestProblems(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
-def main_case(name, args, before, code, out, err, after=(), stored=None, commit_after=False, on_disk=()):
-    return name, args, before, list(after), commit_after, list(on_disk), stored, code, out, err
+def main_case(
+    name,
+    args,
+    before,
+    code,
+    out,
+    err,
+    after=(),
+    stored=None,
+    commit_after=False,
+    on_disk=(),
+    decided=None,
+):
+    return name, args, before, list(after), commit_after, list(on_disk), stored, decided, code, out, err
 
 
 def sorted_keys(entry):
@@ -336,6 +348,7 @@ def link_outside(outside, rel):
 class TestMain(unittest.TestCase):
     def test_main(self):
         decided = json.dumps(findings_file(ACCEPTED))
+        recorded = json.dumps([MAPLE_RECORD])
         no_model = [remove(MD), remove(MODEL), remove(SECURITY)]
         diff = ["diff", "MPL-340", "--base", "BASE"]
         cases = [
@@ -484,6 +497,18 @@ class TestMain(unittest.TestCase):
                 after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
                 stored=decided,
                 commit_after=True,
+                decided=recorded,
+            ),
+            main_case(
+                "diff raises an entry whose decision is only in the findings file",
+                diff,
+                [],
+                0,
+                APPLIED_LINES,
+                "",
+                after=[lambda repo: trust_model.apply(repo, json.loads(decided))],
+                stored=decided,
+                commit_after=True,
             ),
             main_case(
                 "diff with an unreadable findings file",
@@ -495,6 +520,26 @@ class TestMain(unittest.TestCase):
                 stored="{",
             ),
             main_case(
+                "diff with an unreadable decisions file",
+                diff,
+                [],
+                1,
+                "",
+                "reading decisions: MPL-340.json: not valid JSON\n",
+                stored=decided,
+                decided="{",
+            ),
+            main_case(
+                "apply with an unreadable decisions file",
+                ["apply", "MPL-340"],
+                [],
+                1,
+                "",
+                "reading decisions: MPL-340.json: not valid JSON\n",
+                stored=decided,
+                decided="{",
+            ),
+            main_case(
                 "diff with an unknown base",
                 ["diff", "MPL-340", "--base", "0" * 40],
                 [],
@@ -504,13 +549,27 @@ class TestMain(unittest.TestCase):
             ),
             main_case("diff with a bad card key", ["diff", "nope", "--base", "BASE"], [], 2, "", USAGE),
             main_case("diff without a base", ["diff", "MPL-340"], [], 2, "", USAGE),
-            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided),
+            main_case("apply", ["apply", "MPL-340"], [], 0, '{"added": 2}\n', "", stored=decided, decided=recorded),
+            main_case(
+                "apply ignores a decision only in the findings file",
+                ["apply", "MPL-340"],
+                [],
+                0,
+                '{"added": 0}\n',
+                "",
+                stored=decided,
+            ),
             main_case("apply with no findings file", ["apply", "MPL-340"], [], 0, '{"added": 0}\n', ""),
             main_case("apply with a bad card key", ["apply", "mpl"], [], 2, "", USAGE),
         ]
 
-        for name, args, before, after, commit_after, on_disk, stored, code, out, err in cases:
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as store:
+        for name, args, before, after, commit_after, on_disk, stored, decided_by_maple, code, out, err in cases:
+            with (
+                self.subTest(name),
+                tempfile.TemporaryDirectory() as directory,
+                tempfile.TemporaryDirectory() as store,
+                tempfile.TemporaryDirectory() as decisions,
+            ):
                 # given
                 repo = Path(directory)
                 copy_templates(repo)
@@ -525,13 +584,15 @@ class TestMain(unittest.TestCase):
                     change(repo)
                 if stored is not None:
                     (Path(store) / "MPL-340.json").write_text(stored)
+                if decided_by_maple is not None:
+                    (Path(decisions) / "MPL-340.json").write_text(decided_by_maple)
                 argv = ["trust_model.py", *[{"DIR": directory, "BASE": base}.get(arg, arg) for arg in args]]
                 stdout, stderr = io.StringIO(), io.StringIO()
 
                 # when
                 with (
                     contextlib.chdir(directory),
-                    mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": store}),
+                    mock.patch.dict(os.environ, {"MAPLE_FINDINGS_DIR": store, "MAPLE_DECISIONS_DIR": decisions}),
                     mock.patch("sys.argv", argv),
                     contextlib.redirect_stdout(stdout),
                     contextlib.redirect_stderr(stderr),
@@ -946,6 +1007,12 @@ OVERRIDDEN = finding(decision=decision("fix-now"), severityOverride="low")
 TRACKED = finding(
     decision=decision("fix-later"),
     applied={"at": DECIDED_AT, "commit": None, "cardKey": "MPL-400"},
+)
+
+
+MAPLE_RECORD = {"id": "F1", "identity": CODE, "decision": ACCEPTED["decision"], "severityOverride": None}
+APPLIED_LINES = (
+    json.dumps([{"file": MODEL, "lines": ["+" + ACCEPTED_LINE]}, {"file": MD, "lines": ["+" + ACCEPTED_BULLET]}]) + "\n"
 )
 
 

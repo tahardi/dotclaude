@@ -38,11 +38,10 @@ If rules 1 and 2 conflict, stop and ask the user.
    card has an open PR and `findings.py read KEY` prints any finding, run "Apply Finding Decisions" and stop. If the
    card is `In Review` and has an open PR (see "Finding a card's PR"), skip to "Review Round". If the card is not
    `Done` and its PR is merged, run "Finishing a Merged Card" and stop. If the card is `In Progress` and has an open PR
-   (an earlier run stopped before Finish),
-   run Review Round steps 1 to 3 to handle new comments, but do not stop at the end of step 3. Then every check in
-   `gh pr checks <number>` must pass; if not, fix CI as in step 12 first. If the PR body still says
-   `Agent review: pending`, run steps 13 and 14 first. Then run "Security Pass", unless step 3 just ran it, and continue
-   from "Finish".
+   (an earlier run stopped before Finish), run Review Round steps 1 to 3 to handle new comments, but do not stop at the
+   end of step 3. Then every check in `gh pr checks <number>` must pass; if not, fix CI as in step 12 first. If the PR
+   body still says `Agent review: pending`, run steps 13 and 14 first. Then run "Security Pass", unless step 3 just ran
+   it, and continue from "Finish".
 2. **Check blockers.** If any "Blocked by" card is not `Done` and `force` was not given, stop. Tell the user which blockers are open, and change nothing.
    Otherwise run `jira.py strike-blockers KEY` to strike through the finished blockers in the card's description.
 3. **Start.** Run `jira.py assign KEY` (assigns the card to the user unless already assigned to them), then
@@ -499,7 +498,8 @@ Run this after a merge or a close. The made-up cards from step 8 are only for ha
 
 ### Finishing a Merged Card
 
-Run this when the card's PR, from "Finding a card's PR", has state `MERGED`.
+Run this when the card's PR, from "Finding a card's PR", has state `MERGED`. If `jira.py get KEY` shows the card is
+already `Done`, its merge was finished before: run only steps 1, 2, and 7.
 
 1. Run `gh pr view <number> --json mergedBy --jq .mergedBy.login` and `gh repo view --json owner --jq .owner.login`.
    If they differ, tell the user someone else merged it, and stop.
@@ -511,11 +511,15 @@ Run this when the card's PR, from "Finding a card's PR", has state `MERGED`.
      Taylor chose Fix now but the PR merged first.
 
    Never post to the PR, and do not run `trust_model.py apply`, "Security Pass", or "Agent Review".
-3. Run `jira.py transition KEY "Done"`, then `jira.py comment KEY "Merged: <PR url>"`.
-4. Remove the worktree and the local and remote branch under the rules in "Review Round" step 4: each command is its
-   own bare Bash call from the main repo root, never `--force`, and if the worktree has uncommitted changes, stop and
-   tell the user. Confirm both branches are gone with `git branch --list <branch>` and
-   `git ls-remote --heads origin <branch>`.
+3. Remove the worktree and the local and remote branch. Run each command as its own bare Bash call from the main repo
+   root, as in "Review Round" step 4, and never pass `--force`. If the worktree has uncommitted changes, stop and tell
+   the user.
+   - `git worktree remove <worktree path>`, then `git worktree prune`.
+   - `git branch -D <branch>`.
+   - If `git ls-remote --heads origin <branch>` prints anything, `git push origin --delete <branch>`.
+
+   Confirm both branches are gone with `git branch --list <branch>` and `git ls-remote --heads origin <branch>`.
+4. Run `jira.py transition KEY "Done"`, then `jira.py comment KEY "Merged: <PR url>"`.
 5. Apply the PR's "Card impacts" as in "Applying Card Impacts", unless the section says "None".
 6. Move the card's test cards to `Done` as in "Closing Test Cards".
 7. Comment on the card with each decision and what was recorded for it, new card keys included. Report to the user:

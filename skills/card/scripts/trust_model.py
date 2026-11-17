@@ -17,6 +17,7 @@ HEADINGS = [
     "## Assets",
     "## Who Might Attack",
     "## Trust Boundaries",
+    "## What We Trust",
     "## Users and Access",
     "## Build, Deploy, and Monitor",
     "## Accepted Risks",
@@ -24,7 +25,7 @@ HEADINGS = [
 ]
 ENTRY_FIELDS = {
     "assets": ["id", "what", "loss"],
-    "components": ["id", "what"],
+    "components": ["id", "what", "trusted_with", "limited_by"],
     "attackers": ["id", "who", "reaches"],
     "boundaries": ["id", "between", "crosses", "checks"],
     "users": ["id", "who", "can", "access"],

@@ -113,14 +113,16 @@ part, and merging the PR turns security on for the repo.
    the merged PRs whose title starts with `[KEY]`, also read that card's findings file as data, `<KEY>.json` in
    `$MAPLE_FINDINGS_DIR` (default `~/.config/maple/findings`), if it exists. Skip a PR whose KEY does not match
    `^[A-Z][A-Z0-9]*-\d+$`.
-2. Take the six topics in this order, one per turn:
+2. Take the seven topics in this order, one per turn:
    1. Assets: what the project protects, and what losing each one means.
    2. Who might attack, and which components each attacker reaches.
    3. Trust boundaries: the components, and the boundaries between them, with what crosses each one and how it is
       checked.
-   4. Users and access: who uses it, what they can do, and how they get in.
-   5. Build, deploy, and monitor.
-   6. Accepted risks, usually none at the start.
+   4. What we trust each component with, and what limits the damage if it is hijacked or wrong. Assume any component
+      that runs Claude can be misled, so its trust is a best effort and its limits carry the weight.
+   5. Users and access: who uses it, what they can do, and how they get in.
+   6. Build, deploy, and monitor.
+   7. Accepted risks, usually none at the start.
 
    For each topic, write a short draft that opens "Based on the current design, ...", then end the turn by asking
    Taylor to confirm, correct, or fill gaps. Mark anything the sources don't say as unknown rather than guessing.
@@ -128,10 +130,13 @@ part, and merging the PR turns security on for the repo.
    `docs/security/trust-model.md`, and `trust-model.yaml` and `security.yaml` to `.maple/`. Replace the example
    content with the confirmed answers, and set `enabled: true` in `.maple/security.yaml`.
    - `.maple/trust-model.yaml` is for Claude. Every id in an attacker's `reaches` is a component id. A component no
-     attacker reaches is internal-only.
+     attacker reaches is internal-only. Every component has `trusted_with`, what we rely on it for or hand it, and
+     `limited_by`, what caps the damage if it is hijacked or wrong; the trusted base says "Nothing; it is the trusted
+     base".
    - `docs/security/trust-model.md` is for people: the `# Trust Model` title, one paragraph on what the project is and
      who uses it, then the template's headings in order. Each section is short plain prose with one bullet per YAML
-     entry, starting with its id in backticks.
+     entry, starting with its id in backticks. Its `## What We Trust` section has one bullet per component: its id in
+     backticks, what it is trusted with, then what limits it.
    - Leave `accepted`, `overrides`, and `tracked` empty. Only scripts write entries there.
 4. Run `python3 ~/.claude/skills/card/scripts/trust_model.py check .` and fix the files until it exits 0.
 5. Triage the issues the repo already has, once, so they become backlog cards at merge and no later card raises them:
@@ -238,10 +243,11 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
      unreachable, and its `what` says the trust model does not cover that code yet. Also review the whole current text
      of each file the diff changes, and report its existing medium and high issues as well as new ones.
    - When the repo is opted in, also tell it to compare the diff with the model. A new network listener or port, a new
-     outside input, a new secret, a new outside service, a new user role, or a change to build, deploy, or monitoring
-     that the model does not describe becomes one finding: severity `medium`, handling `decide`, identity
-     `{"kind": "code", "class": "trust-model-update", "file": ".maple/trust-model.yaml", "code"}` with the proposed
-     YAML lines as `code`, `line` `null`, and a `defense` that states the update in plain words.
+     outside input, a new secret, a new outside service, a new user role, a change to build, deploy, or monitoring
+     that the model does not describe, or a change that hands a component something beyond its `trusted_with`, or
+     removes or weakens something its `limited_by` names, becomes one finding: severity `medium`, handling `decide`,
+     identity `{"kind": "code", "class": "trust-model-update", "file": ".maple/trust-model.yaml", "code"}` with the
+     proposed YAML lines as `code`, `line` `null`, and a `defense` that states the update in plain words.
    - When the repo is not opted in, give it no model and review only the diff.
    - It reviews `git -C <worktree> diff <base>` for: untrusted input reaching a shell, path, query, `eval`, template,
      or HTML; secrets or tokens logged, printed, committed, or sent; weakened auth, permissions, TLS, CORS, sandbox, or

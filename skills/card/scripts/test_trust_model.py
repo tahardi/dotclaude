@@ -186,6 +186,26 @@ class TestProblems(unittest.TestCase):
                 checking("assets entry 1 has no loss"),
             ),
             (
+                "component without trusted_with",
+                model(lambda d: d["components"][0].pop("trusted_with")),
+                checking("components entry 1 has no trusted_with"),
+            ),
+            (
+                "component without limited_by",
+                model(lambda d: d["components"][0].pop("limited_by")),
+                checking("components entry 1 has no limited_by"),
+            ),
+            (
+                "empty trusted_with",
+                model(lambda d: d["components"][0].update(trusted_with="")),
+                checking("components entry 1 has no trusted_with"),
+            ),
+            (
+                "missing trust heading",
+                replace(MD, "## What We Trust\n", ""),
+                checking('trust-model.md has no "## What We Trust" heading'),
+            ),
+            (
                 "unknown component",
                 model(lambda d: d["attackers"][0].update(reaches=["nope"])),
                 checking("attacker pr-author reaches unknown component nope"),
@@ -256,7 +276,11 @@ class TestProblems(unittest.TestCase):
             ),
             (
                 "duplicate id",
-                model(lambda d: d["components"].append({"id": "ci", "what": "again"})),
+                model(
+                    lambda d: d["components"].append(
+                        {"id": "ci", "what": "again", "trusted_with": "t", "limited_by": "l"}
+                    )
+                ),
                 checking("components has id ci more than once"),
             ),
             (

@@ -6,12 +6,20 @@ assets:
 components:
   - id: renderer
     what: The app window that draws the board
+    trusted_with: Drawing outside text, nothing else
+    limited_by: The window sandbox and the schema check on every IPC call
   - id: main-process
     what: The Node process that runs git, gh, and Jira calls
+    trusted_with: Taylor's gh login and Jira token
+    limited_by: Nothing; it is the trusted base
   - id: hook-server
     what: Local socket that takes hook events from Claude
+    trusted_with: Passing hook events from Claude sessions to the main process
+    limited_by: Listening only on a local socket and the schema check on every event
   - id: ci
     what: GitHub Actions jobs that run on every PR
+    trusted_with: Running the tests on every PR
+    limited_by: Read-only repo permissions and no secrets on PRs
 attackers:
   - id: pr-author
     who: Anyone who can open a PR or comment on GitHub

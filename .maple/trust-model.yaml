@@ -72,7 +72,9 @@ components:
     limited_by: >-
       VM tokens that cannot approve or merge, Maple's merge pinned to the reviewed commit, decisions kept only in
       Maple, and trust models read from the base commit. Gap: until Xena runs, card sessions on the desktop merge PRs
-      themselves on an approving comment, not pinned to the reviewed commit
+      themselves on an approving comment, not pinned to the reviewed commit. Gap: applying finding decisions skips the
+      security pass when HEAD matches the commit the last pass reviewed and the worktree is clean, and it checks only
+      the local worktree, not the PR's head on GitHub
   - id: skill-scripts
     what: The Python scripts the skills run for Jira, findings, trust models, review notes, lessons, and cards
     trusted_with: >-

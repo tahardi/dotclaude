@@ -247,7 +247,8 @@ to decide. Severity is advisory: the pass never blocks the card, and it posts no
      that the model does not describe, or a change that hands a component something beyond its `trusted_with`, or
      removes or weakens something its `limited_by` names, becomes one finding: severity `medium`, handling `decide`,
      identity `{"kind": "code", "class": "trust-model-update", "file": ".maple/trust-model.yaml", "code"}` with the
-     proposed YAML lines as `code`, `line` `null`, and a `defense` that states the update in plain words.
+     proposed YAML lines as `code`, `line` `null`, and a `defense` that states the update in plain words. A proposed
+     new component carries both `trusted_with` and `limited_by`.
    - When the repo is not opted in, give it no model and review only the diff.
    - It reviews `git -C <worktree> diff <base>` for: untrusted input reaching a shell, path, query, `eval`, template,
      or HTML; secrets or tokens logged, printed, committed, or sent; weakened auth, permissions, TLS, CORS, sandbox, or
@@ -377,8 +378,9 @@ card's worktree, recreating it as in Review Round if it is gone.
    exits 0, and commit. Then run `findings.py applied KEY <id> --commit <short sha>`.
    - For class `trust-model-change`, the fix is to revert that edit to the model file.
    - For class `trust-model-update`, the fix is to edit both `.maple/trust-model.yaml` and
-     `docs/security/trust-model.md` as the finding's defense proposes. The next Security Pass raises that edit once as
-     a `trust-model-change` finding, so Taylor sees exactly what was written.
+     `docs/security/trust-model.md` as the finding's defense proposes, with a `## What We Trust` bullet for any new
+     component. The next Security Pass raises that edit once as a `trust-model-change` finding, so Taylor sees
+     exactly what was written.
 3. **Fix later** (`fix-later`): use the Write tool to save a description to a new scratchpad file, never a heredoc.
    Start it with the `- **Problem:**`, `- **Goal:**`, and `- **Done when:**` bullets written from the finding, then
    `## What`, `## How`, `## Impact`, and `## Defense` with the finding's text, then a link to the PR. Write the card's

@@ -9,9 +9,9 @@ desktop sessions were agentic.
 ## Assets
 
 - `desktop-guardrails`: the desktop settings that keep desktop Claude in prompt mode, with the sandbox, deny rules,
-  network allowlist, and push-to-main hook. Sandboxed Bash runs without a prompt, and a few git and gh cleanup
-  commands run outside the sandbox. If lost, Claude on the desktop gets Taylor's machine, logins, vault, and secrets
-  store. Gap: the push-to-main hook never blocks, because grep rejects its pattern.
+  network allowlist, and push-to-main hook. Sandboxed Bash runs without a prompt, and `gh pr merge`,
+  `git branch -D`, and `git worktree remove` run outside the sandbox. If lost, Claude on the desktop gets Taylor's
+  machine, logins, vault, and secrets store. Gap: the push-to-main hook never blocks, because grep rejects its pattern.
 - `vm-exits`: the parts of the VM settings that open a path out of the VM, such as MCP servers, hooks, folders the
   desktop reads, connectors, and marketplaces. If lost, a VM session reaches the desktop, the full vault, or
   claude.ai connectors.

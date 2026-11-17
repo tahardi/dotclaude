@@ -1,0 +1,251 @@
+version: 1
+principles:
+  - id: xena-assumed
+    what: >-
+      This model describes the Xena setup, where agentic sessions run only in the VM and desktop Claude runs in
+      prompt mode. Until Xena runs, desktop sessions skip permissions and run agentically, so any change that weakens
+      desktop-settings is rated as if desktop sessions were agentic, and any change to skill-scripts is rated as if
+      they hold Taylor's own Jira token on the desktop
+assets:
+  - id: desktop-guardrails
+    what: >-
+      The desktop settings that keep desktop Claude in prompt mode with the sandbox on, no unsandboxed retries, the
+      deny rules, the network allowlist, and the push-to-main hook. Sandboxed Bash runs without a prompt, and
+      gh pr merge, git branch -D, and git worktree remove run outside the sandbox. Gap: the push-to-main hook never
+      blocks, because grep rejects its pattern
+    loss: Claude on the desktop gets Taylor's machine, keyring logins, vault, and secrets store
+  - id: vm-exits
+    what: >-
+      The parts of the VM managed settings that open a path out of the VM: MCP servers such as the vault socket,
+      hooks, folders the desktop reads, claude.ai connectors and nonessential traffic turned off, and allowed
+      marketplaces
+    loss: A VM session reaches the desktop, the full vault, or Taylor's claude.ai connectors
+  - id: claude-config
+    what: >-
+      The instructions and skills every session follows, on the desktop and in the VM; VM changes arrive only
+      through a merged PR and a reinstall
+    loss: Every session follows bad instructions, such as skipping the security pass or trusting VM-written notes
+  - id: plugin-allowlist
+    what: The pinned plugins and marketplaces for desktop and VM, with cloud and telemetry features off
+    loss: Outside code runs in every session, or session data goes to outside services
+  - id: vm-tokens
+    what: The hour-long GitHub App token and the Jira bot token the skill scripts use in the VM
+    loss: PRs and pushes to named repos and edits to cards; no merges and no admin
+  - id: findings
+    what: >-
+      The scripts that write findings and the trust model rules that decide which findings reach Taylor, in every
+      opted-in repo
+    loss: A script or rule change quietly drops or downgrades real findings
+  - id: command-log
+    what: The desktop hook's log of every Bash command
+    loss: A secret typed on the desktop command line leaks
+components:
+  - id: maple
+    what: The desktop app that starts VM sessions, shows findings, keeps Taylor's decisions, and merges PRs
+    trusted_with: Taylor's decisions, the merge with Taylor's gh login, and starting VM sessions
+    limited_by: Nothing; it is the trusted base, with Xena's desktop services
+  - id: desktop-settings
+    what: The desktop settings file, linked as ~/.claude/settings.json
+    trusted_with: >-
+      Keeping desktop Claude in prompt mode, with the sandbox on, no unsandboxed retries, the deny rules, and the
+      network allowlist; sandboxed Bash runs without a prompt, and gh pr merge, git branch -D, and git worktree
+      remove run outside the sandbox
+    limited_by: Taylor's review of every PR that changes it, and the audit flagging any desktop setting that allows more
+  - id: vm-settings
+    what: The VM managed settings and MCP list, installed root-owned in /etc/claude-code
+    trusted_with: >-
+      Closing the VM's exits: connectors off, managed-only hooks, permissions, and MCP servers, and only allowed
+      marketplaces
+    limited_by: >-
+      The VM wall around it (proxy, firewall, vault gateway path rules, short-lived tokens), being root-owned, the
+      guard suite testing each exit, and the VM settings test on every PR, which checks write paths, deny rules,
+      managed hooks, the MCP list, and plugins against the allowlist
+  - id: instructions
+    what: The global CLAUDE.md, linked on the desktop and copied into /etc/claude-code in the VM
+    trusted_with: >-
+      How every session behaves, such as worktrees, PR titles, and treating VM-written notes as untrusted
+    limited_by: >-
+      Nothing enforces it; it is a best effort. The VM wall, scoped tokens, and Maple's checks carry the weight
+  - id: skills
+    what: The skill instructions, the reviewer prompt, and the templates
+    trusted_with: Steering sessions through each card, including the security pass, the PR, and never merging unapproved
+    limited_by: >-
+      VM tokens that cannot approve or merge, Maple's merge pinned to the reviewed commit, decisions kept only in
+      Maple, and trust models read from the base commit. Gap: until Xena runs, card sessions on the desktop merge PRs
+      themselves on an approving comment, not pinned to the reviewed commit
+  - id: skill-scripts
+    what: The Python scripts the skills run for Jira, findings, trust models, review notes, lessons, and cards
+    trusted_with: >-
+      The Jira bot token and the hour-long GitHub token, writing findings, and filtering them by trust model
+    limited_by: >-
+      The VM sandbox and the tokens' narrow scope, Maple's own schema checks on findings, decisions read only from
+      Maple's record, and unit tests in CI. Gap: a change that quietly drops or downgrades findings is caught only by
+      tests and Taylor's review. Gap: until Xena runs, desktop card sessions run these scripts with Taylor's own Jira
+      token and the desktop sandbox lets them reach Jira
+  - id: plugin-list
+    what: The plugin and MCP allowlist and its drift checker
+    trusted_with: Naming the only outside code that runs in sessions, pinned to commits, with cloud features off
+    limited_by: >-
+      The VM's strict marketplace list, the VM proxy allowlist, the audit's drift check, and the VM settings test on
+      every PR matching enabled plugins and marketplaces to the list. Gap: the desktop loads whatever plugin version is
+      installed until the audit runs
+  - id: install-script
+    what: The script that links the desktop files and copies the VM files
+    trusted_with: Putting reviewed files in place, root-owned in the VM and linked on the desktop
+    limited_by: >-
+      The VM user being unable to change the installed copy, the guard suite rerunning, and the audit checking
+      desktop links. Gap: the installed commit is not recorded
+  - id: statusline
+    what: The status bar script on the desktop and in the VM
+    trusted_with: Drawing the model, branch, and usage from session data
+    limited_by: Being read-only and running with the session's own rights
+  - id: ci
+    what: GitHub Actions jobs, the main ruleset, and Dependabot
+    trusted_with: Running the checks on every PR
+    limited_by: A read-only token, no secrets, actions pinned to SHAs, and credentials not kept after checkout
+  - id: vm-sessions
+    what: Claude sessions in the VM, which follow the VM copy of this config
+    trusted_with: Card work, as a best effort
+    limited_by: The VM wall, scoped short-lived tokens, no merge or approve, and root-owned settings
+  - id: desktop-claude
+    what: Claude on the desktop in prompt mode, which follows the desktop copy of this config
+    trusted_with: Interactive help, as a best effort
+    limited_by: >-
+      Prompt mode, where Taylor approves each action outside the sandbox; sandboxed Bash runs without a prompt, bound
+      by the sandbox, network allowlist, and deny rules
+attackers:
+  - id: misled-vm-session
+    who: >-
+      A Claude session in the VM that does harm it does not recognize, steered by card text, PR comments, repo
+      content, web pages, a plugin, or code it runs. It can open PRs on dotclaude that change any part; those changes
+      take effect only after Taylor merges them. It writes the hook events and finding files Maple reads
+    reaches:
+      - maple
+      - vm-sessions
+      - skill-scripts
+      - ci
+      - desktop-settings
+      - vm-settings
+      - instructions
+      - skills
+      - plugin-list
+      - install-script
+      - statusline
+  - id: public-reader
+    who: >-
+      Anyone on the internet, who can read the whole public config, this model, and past findings, and can open fork
+      PRs and post comments
+    reaches: [ci]
+  - id: malicious-upstream
+    who: >-
+      A bad plugin release, plugin marketplace, GitHub Action, or the gitleaks Go module; plugin code runs inside
+      sessions, so it reaches what they reach, and on the desktop plugin hooks and helper servers run as Taylor
+      outside the sandbox
+    reaches:
+      - maple
+      - vm-sessions
+      - desktop-claude
+      - ci
+      - skill-scripts
+      - desktop-settings
+      - vm-settings
+      - instructions
+      - skills
+      - plugin-list
+      - install-script
+      - statusline
+  - id: misled-desktop-claude
+    who: >-
+      Desktop Claude steered by text it reads; it runs sandboxed Bash without a prompt and anything else only as
+      Taylor approves. Until Xena runs, desktop card sessions skip prompts and merge their own PRs, so it reaches every
+      part a PR can change
+    reaches:
+      - desktop-claude
+      - statusline
+      - desktop-settings
+      - instructions
+      - skills
+      - plugin-list
+      - install-script
+      - vm-settings
+      - ci
+      - skill-scripts
+      - maple
+boundaries:
+  - id: pr-to-main
+    between: [vm-sessions, ci]
+    crosses: PRs from VM sessions and fork PRs, then the merge to main
+    checks: >-
+      Ruleset requires a PR, squash merges, and the shellcheck, test, syntax, and secrets checks, with no bypass;
+      actions pinned to SHAs, read-only token, no pull_request_target; Taylor merges from Maple pinned to the
+      reviewed head commit, and VM tokens cannot merge. Gaps: 0 approvals are required; until Xena runs, card sessions
+      on the desktop merge PRs themselves, not pinned to the reviewed commit
+  - id: main-to-vm
+    between: [install-script, vm-settings, vm-sessions]
+    crosses: Settings, CLAUDE.md, skills, and the status bar, copied root-owned into the VM
+    checks: >-
+      The VM user cannot change them, and the guard suite reruns after any dotclaude change. Gap: the installed
+      commit is not recorded
+  - id: main-to-desktop
+    between: [install-script, desktop-settings, desktop-claude]
+    crosses: Symlinks into the main checkout, so whatever is checked out goes live, uncommitted edits included
+    checks: The audit reports local changes and commits not on origin/main
+  - id: sessions-to-scripts
+    between: [vm-sessions, skill-scripts]
+    crosses: Finding JSON, card text, review threads, and scanned repo files
+    checks: >-
+      The findings script checks schema and lengths, card keys are matched to a pattern, summaries go through files
+      and never on a command line, and the trust model is read from the base commit. Gap: the Jira helper has no
+      request timeout
+  - id: maple-to-scripts
+    between: [maple, skill-scripts]
+    crosses: Taylor's decisions on findings
+    checks: Maple alone records decisions, and a session-written decision is ignored
+  - id: scripts-to-maple
+    between: [skill-scripts, maple]
+    crosses: Finding files that Maple reads and shows
+    checks: Maple schema-checks and caps them and draws them as text
+  - id: vm-exits
+    between: [vm-settings, vm-sessions]
+    crosses: The forwarded vault socket MCP server and the hook events file Maple follows
+    checks: >-
+      Managed-only hooks, permissions, and MCP servers; connectors and nonessential traffic off; marketplaces limited
+      to the allowlist
+users:
+  - id: taylor
+    who: Owner and only person who uses it
+    can: >-
+      Everything: merge PRs from Maple pinned to the reviewed commit, run install.sh, build the VM, and change the
+      ruleset
+    access: Desktop login, gh login as repo owner in the keyring with a YubiKey second factor, and the Jira login
+  - id: vm-session
+    who: Every Claude session in the VM, acting for Taylor
+    can: >-
+      Push branches, open PRs, and comment on named repos including dotclaude; read and edit cards as the Jira bot;
+      write findings in the VM. Cannot approve, merge, change settings or rulesets, tag, delete repos, or change its
+      own installed config
+    access: The hour-long GitHub App token from xena-tokend and the Jira bot token
+  - id: desktop-claude
+    who: Claude on the desktop, acting for Taylor
+    can: Run sandboxed Bash without a prompt, and anything else only as Taylor approves at each prompt
+    access: Taylor's desktop session; no agent tokens of its own
+  - id: public
+    who: Anyone
+    can: Read the repo and open fork PRs, which run CI with no secrets
+    access: None beyond public GitHub
+build:
+  built: >-
+    make pre-pr in VM sessions runs shellcheck, the Python unit tests, the install script test, JSON and YAML syntax
+    checks, and gitleaks from a pinned Go module; GitHub Actions runs shellcheck, test, syntax, and secrets on every
+    PR and push to main, all required checks, with actions pinned to SHAs; Dependabot updates actions weekly, and
+    nothing updates the gitleaks pin
+  deployed: >-
+    install.sh desktop links ~/.claude to the main checkout, so changes go live at Taylor's git pull; the VM build
+    runs install.sh vm, which copies files root-owned into /etc/claude-code, so changes reach the VM only through a
+    merged PR and a reinstall. Gap: the installed commit is not recorded on either side
+  monitored: >-
+    /audit and xena audit check desktop config drift and plugin and MCP drift; the guard suite reruns after any
+    dotclaude change and nightly; each security pass reads this model from the PR's base commit and raises any edit
+    to it as a finding; the desktop hook logs every Bash command; no alerts specific to dotclaude
+accepted:
+overrides:

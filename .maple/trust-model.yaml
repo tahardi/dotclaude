@@ -116,8 +116,9 @@ attackers:
     who: >-
       A Claude session in the VM that does harm it does not recognize, steered by card text, PR comments, repo
       content, web pages, a plugin, or code it runs. It can open PRs on dotclaude that change any part; those changes
-      take effect only after Taylor merges them
+      take effect only after Taylor merges them. It writes the hook events and finding files Maple reads
     reaches:
+      - maple
       - vm-sessions
       - skill-scripts
       - ci
@@ -136,8 +137,10 @@ attackers:
   - id: malicious-upstream
     who: >-
       A bad plugin release, plugin marketplace, GitHub Action, or the gitleaks Go module; plugin code runs inside
-      sessions, so it reaches what they reach
+      sessions, so it reaches what they reach, and on the desktop plugin hooks and helper servers run as Taylor
+      outside the sandbox
     reaches:
+      - maple
       - vm-sessions
       - desktop-claude
       - ci
@@ -152,8 +155,16 @@ attackers:
   - id: misled-desktop-claude
     who: >-
       Desktop Claude steered by text it reads; it runs sandboxed Bash without a prompt and anything else only as
-      Taylor approves
-    reaches: [desktop-claude, statusline]
+      Taylor approves. Until Xena runs, desktop card sessions skip prompts and merge their own PRs, so it reaches every
+      part a PR can change
+    reaches:
+      - desktop-claude
+      - statusline
+      - desktop-settings
+      - instructions
+      - skills
+      - plugin-list
+      - install-script
 boundaries:
   - id: pr-to-main
     between: [vm-sessions, ci]

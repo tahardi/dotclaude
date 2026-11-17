@@ -29,11 +29,15 @@ desktop sessions were agentic.
 
 - `misled-vm-session`: a VM session steered by text, a plugin, or code it runs. It reaches the VM sessions, the skill
   scripts, and CI, and through PRs on dotclaude every part of the config, which takes effect only once Taylor merges.
+  It also reaches Maple, which reads the hook events and finding files it writes.
 - `public-reader`: anyone on the internet, who can read the public repo and open fork PRs. Reaches CI only.
 - `malicious-upstream`: a bad plugin, marketplace, GitHub Action, or the gitleaks module. Plugin code runs inside
-  sessions, so it reaches what they reach, plus desktop Claude and CI.
-- `misled-desktop-claude`: desktop Claude steered by text it reads. Reaches desktop Claude and the status bar. It runs
-  sandboxed Bash without a prompt, and anything else only as Taylor approves.
+  sessions, so it reaches what they reach, plus desktop Claude, CI, and Maple. On the desktop, plugin hooks and helper
+  servers run as Taylor outside the sandbox.
+- `misled-desktop-claude`: desktop Claude steered by text it reads. It runs sandboxed Bash without a prompt, and
+  anything else only as Taylor approves. Until Xena runs, desktop card sessions skip prompts and merge their own PRs,
+  so it reaches the desktop settings, instructions, skills, plugin list, and install script as well as itself and the
+  status bar.
 
 ## Trust Boundaries
 

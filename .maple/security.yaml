@@ -1,0 +1,8 @@
+version: 1
+enabled: true
+tracked:
+  - {"identity": {"kind": "code", "class": "merge-approval-bypass", "file": "skills/card/SKILL.md", "hash": "ab5ffb50f0c69d09"}, "title": "Card sessions merge on an approval timed by a forgeable commit date, not pinned to the reviewed commit", "card": null}
+  - {"identity": {"kind": "code", "class": "broken-guardrail-hook", "file": "settings/desktop.json", "hash": "9374ed5d0d62fbe9"}, "title": "The desktop hook meant to block pushes to main never blocks, because grep rejects its pattern", "card": null}
+  - {"identity": {"kind": "code", "class": "untrusted-instruction-injection", "file": "skills/card/scripts/jira.py", "hash": "4972f59e863a4954"}, "title": "Card comments and attachments from any Jira author, VM bot included, reach sessions as overrides of the card", "card": null}
+  - {"identity": {"kind": "code", "class": "missing-network-timeout", "file": "skills/card/scripts/jira.py", "hash": "48374c2fa1a0960c"}, "title": "Jira helper network calls have no timeout, so a stalled connection hangs the session", "card": null}
+  - {"identity": {"kind": "code", "class": "secret-in-logs", "file": "settings/desktop.json", "hash": "0ce952fa3e88e260"}, "title": "Every desktop Bash command, secrets included, is logged to a file that sandboxed commands can read", "card": null}

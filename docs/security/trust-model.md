@@ -36,8 +36,8 @@ desktop sessions were agentic, and any change to the skill scripts is rated as i
   servers run as Taylor outside the sandbox.
 - `misled-desktop-claude`: desktop Claude steered by text it reads. It runs sandboxed Bash without a prompt, and
   anything else only as Taylor approves. Until Xena runs, desktop card sessions skip prompts and merge their own PRs,
-  so it reaches the desktop settings, instructions, skills, plugin list, and install script as well as itself and the
-  status bar.
+  so it reaches every part a PR can change: the desktop and VM settings, instructions, skills, skill scripts, plugin
+  list, install script, and CI, as well as itself, the status bar, and Maple, which reads the findings it writes.
 
 ## Trust Boundaries
 

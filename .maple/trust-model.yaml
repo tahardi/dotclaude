@@ -167,6 +167,10 @@ attackers:
       - skills
       - plugin-list
       - install-script
+      - vm-settings
+      - ci
+      - skill-scripts
+      - maple
 boundaries:
   - id: pr-to-main
     between: [vm-sessions, ci]

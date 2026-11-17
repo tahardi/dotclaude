@@ -4,7 +4,7 @@ dotclaude is Taylor's Claude Code configuration: the global instructions, skills
 every Claude session follows, on the desktop and in the Xena VM. Taylor is its only user. This model describes the
 Xena setup, where agentic sessions run only in the VM and desktop Claude runs in prompt mode. Until Xena runs, desktop
 sessions still skip permissions and run agentically, so any change that weakens the desktop settings is rated as if
-desktop sessions were agentic.
+desktop sessions were agentic, and any change to the skill scripts is rated as if they hold Taylor's own Jira token.
 
 ## Assets
 
@@ -76,7 +76,8 @@ Any part that runs Claude can be misled, so its trust is a best effort and its l
   Gap: until Xena runs, card sessions on the desktop merge PRs themselves, not pinned to the reviewed commit.
 - `skill-scripts`: trusted with the VM tokens and with writing and filtering findings. Limited by the VM sandbox,
   narrow tokens, Maple's schema checks, decisions from Maple, and unit tests. Gap: a change that quietly drops
-  findings is caught only by tests and review.
+  findings is caught only by tests and review. Gap: until Xena runs, desktop card sessions run these scripts with
+  Taylor's own Jira token.
 - `plugin-list`: trusted with naming the only outside code sessions run. Limited by the VM's marketplace list, the
   proxy allowlist, the audit, and the VM settings test on every PR. Gap: the desktop loads whatever is installed until
   the audit runs.

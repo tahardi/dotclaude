@@ -4,7 +4,8 @@ principles:
     what: >-
       This model describes the Xena setup, where agentic sessions run only in the VM and desktop Claude runs in
       prompt mode. Until Xena runs, desktop sessions skip permissions and run agentically, so any change that weakens
-      desktop-settings is rated as if desktop sessions were agentic
+      desktop-settings is rated as if desktop sessions were agentic, and any change to skill-scripts is rated as if
+      they hold Taylor's own Jira token on the desktop
 assets:
   - id: desktop-guardrails
     what: >-
@@ -79,7 +80,8 @@ components:
     limited_by: >-
       The VM sandbox and the tokens' narrow scope, Maple's own schema checks on findings, decisions read only from
       Maple's record, and unit tests in CI. Gap: a change that quietly drops or downgrades findings is caught only by
-      tests and Taylor's review
+      tests and Taylor's review. Gap: until Xena runs, desktop card sessions run these scripts with Taylor's own Jira
+      token and the desktop sandbox lets them reach Jira
   - id: plugin-list
     what: The plugin and MCP allowlist and its drift checker
     trusted_with: Naming the only outside code that runs in sessions, pinned to commits, with cloud features off

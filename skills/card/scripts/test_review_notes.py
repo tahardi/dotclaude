@@ -7,9 +7,11 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from review_notes import USAGE, general_comment, main, review_payload
+from review_notes import USAGE, general_comment, main, open_fixes, review_payload
 
+THREADS = json.loads((Path(__file__).parent / "testdata" / "review_threads.json").read_text())
 HEADER = "**Reviewer note:** Other notes"
+FIX_HEADER = "**Reviewer fix:** Other findings"
 
 DIFF = """diff --git a/a.py b/a.py
 --- a/a.py
@@ -100,8 +102,8 @@ SPACE_PATH_DIFF = "--- a/a b.py\t\n+++ b/a b.py\t\n@@ -1 +1 @@\n-old\n+new\n"
 QUOTED_PATH_DIFF = '--- "a/caf\\303\\251.py"\n+++ "b/caf\\303\\251.py"\n@@ -1 +1 @@\n-old\n+new\n'
 
 
-def inline(path, line, text):
-    return {"path": path, "line": line, "side": "RIGHT", "body": f"**Reviewer note:** {text}"}
+def inline(path, line, text, marker="**Reviewer note:**"):
+    return {"path": path, "line": line, "side": "RIGHT", "body": f"{marker} {text}"}
 
 
 def review(*comments):
@@ -214,6 +216,43 @@ class ReviewPayloadTest(unittest.TestCase):
                 # then
                 self.assertEqual(str(caught.exception), f"reading notes: note {number} has no text")
 
+    def test_review_payload_marks_each_note_by_kind(self):
+        # given
+        cases = [
+            ("fix", {"kind": "fix"}, "**Reviewer fix:**"),
+            ("question", {"kind": "question"}, "**Reviewer note:**"),
+            ("missing kind", {}, "**Reviewer note:**"),
+        ]
+        for name, kind, marker in cases:
+            with self.subTest(name):
+                notes = [{"path": "a.py", "line": 2, "text": "x", **kind}]
+
+                # when
+                got = review_payload(notes, DIFF, "abc123")
+
+                # then
+                self.assertEqual(got, review(inline("a.py", 2, "x", marker)))
+
+    def test_review_payload_rejects_an_unknown_kind(self):
+        # given
+        cases = [
+            ("unknown word", "x", "x"),
+            ("list", ["fix"], "['fix']"),
+            ("object", {"fix": 1}, "{'fix': 1}"),
+            ("null", None, "None"),
+        ]
+        for name, kind, shown in cases:
+            with self.subTest(name):
+                good = {"path": None, "line": None, "text": "ok"}
+                notes = [good, {"path": None, "line": None, "text": "x", "kind": kind}]
+
+                # when
+                with self.assertRaises(ValueError) as caught:
+                    review_payload(notes, DIFF, "abc123")
+
+                # then
+                self.assertEqual(str(caught.exception), f"reading notes: note 2 has unknown kind {shown}")
+
 
 class GeneralCommentTest(unittest.TestCase):
     def test_general_comment_with_no_diff_takes_every_note(self):
@@ -260,6 +299,27 @@ class GeneralCommentTest(unittest.TestCase):
                 [inline_note, whole_pr_note, {"path": "c.py", "line": 1, "text": "c?"}],
                 f"{HEADER}\n\n1. tests are slow\n2. `c.py:1` c?",
             ),
+            (
+                "fix notes go under their own header",
+                [{"path": None, "line": None, "text": "add a test", "kind": "fix"}],
+                f"{FIX_HEADER}\n\n1. add a test",
+            ),
+            (
+                "fixes come before notes and each group numbers from 1",
+                [
+                    whole_pr_note,
+                    {"path": "c.py", "line": 1, "text": "guard None", "kind": "fix"},
+                    {"path": None, "line": None, "text": "rename?", "kind": "question"},
+                    {"path": None, "line": None, "text": "add a test", "kind": "fix"},
+                ],
+                f"{FIX_HEADER}\n\n1. `c.py:1` guard None\n2. add a test\n\n"
+                f"{HEADER}\n\n1. tests are slow\n2. rename?",
+            ),
+            (
+                "inline fix notes are left out",
+                [{"path": "a.py", "line": 2, "text": "x", "kind": "fix"}, whole_pr_note],
+                f"{HEADER}\n\n1. tests are slow",
+            ),
         ]
         for name, notes, expected in cases:
             with self.subTest(name):
@@ -268,6 +328,54 @@ class GeneralCommentTest(unittest.TestCase):
 
                 # then
                 self.assertEqual(got, expected)
+
+
+def threads(*nodes):
+    return {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": list(nodes)}}}}}
+
+
+def thread(thread_id, resolved, body, path="a.py", line=1):
+    comment = {"author": {"login": "me"}, "body": body, "path": path, "line": line}
+    return {"id": thread_id, "isResolved": resolved, "comments": {"nodes": [comment]}}
+
+
+class OpenFixesTest(unittest.TestCase):
+    def test_open_fixes(self):
+        # given
+        cases = [
+            ("recorded threads", THREADS, ["PRRT_open_fix a.py:4", "PRRT_replied_fix c.py"]),
+            ("no threads", threads(), []),
+            ("resolved fix", threads(thread("T1", True, "**Reviewer fix:** x")), []),
+            ("open note", threads(thread("T1", False, "**Reviewer note:** x")), []),
+            ("open comment from Taylor", threads(thread("T1", False, "fix this")), []),
+            ("fix marker not at the start", threads(thread("T1", False, "see **Reviewer fix:** x")), []),
+            ("open fix", threads(thread("T1", False, "**Reviewer fix:** x", "b.py", 3)), ["T1 b.py:3"]),
+            ("thread with no comments", threads({"id": "T1", "isResolved": False, "comments": {"nodes": []}}), []),
+        ]
+        for name, data, expected in cases:
+            with self.subTest(name):
+                # when
+                got = open_fixes(data)
+
+                # then
+                self.assertEqual(got, expected)
+
+    def test_open_fixes_rejects_an_unexpected_shape(self):
+        # given
+        cases = [
+            ("empty object", {}),
+            ("not an object", []),
+            ("graphql errors", {"errors": [{"message": "bad"}]}),
+            ("nodes is not a list", {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": 1}}}}}),
+        ]
+        for name, data in cases:
+            with self.subTest(name):
+                # when
+                with self.assertRaises(ValueError) as caught:
+                    open_fixes(data)
+
+                # then
+                self.assertTrue(str(caught.exception).startswith("reading threads: "), caught.exception)
 
 
 class MainTest(unittest.TestCase):
@@ -353,12 +461,42 @@ class MainTest(unittest.TestCase):
                 self.assertEqual(stdout.getvalue(), "")
                 self.assertTrue(str(caught.exception.code).startswith(expected), caught.exception.code)
 
+    def run_open(self, stdin):
+        stdout = io.StringIO()
+        argv = ["review_notes.py", "open"]
+        with self.assertRaises(SystemExit) as caught, mock.patch.object(sys, "argv", argv), mock.patch.object(
+            sys, "stdin", io.StringIO(stdin)
+        ), redirect_stdout(stdout):
+            main()
+        return caught.exception.code, stdout.getvalue()
+
+    def test_main_open(self):
+        # given
+        cases = [
+            ("open fixes exit 1", json.dumps(THREADS), 1, "PRRT_open_fix a.py:4\nPRRT_replied_fix c.py\n"),
+            ("no open fixes exit 0", json.dumps(threads(thread("T1", False, "**Reviewer note:** x"))), 0, ""),
+            ("bad JSON", "{", "reading threads: ", ""),
+            ("unexpected shape", "{}", "reading threads: ", ""),
+        ]
+        for name, stdin, code, expected in cases:
+            with self.subTest(name):
+                # when
+                got_code, got = self.run_open(stdin)
+
+                # then
+                self.assertEqual(got, expected)
+                if isinstance(code, str):
+                    self.assertTrue(str(got_code).startswith(code), got_code)
+                else:
+                    self.assertEqual(got_code, code)
+
     def test_main_rejects_a_bad_command(self):
         cases = [
             ("unknown command", ["nope", "a", "b"]),
             ("no arguments", []),
             ("review without a commit", ["review", "a", "b"]),
             ("comment with a commit", ["comment", "a", "b", "c"]),
+            ("open with an argument", ["open", "a"]),
         ]
         for name, args in cases:
             with self.subTest(name):

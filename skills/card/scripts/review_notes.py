@@ -5,7 +5,9 @@ from pathlib import Path
 
 HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 MARKER = "**Reviewer note:**"
-USAGE = "usage: review_notes.py review NOTES DIFF COMMIT | comment NOTES DIFF"
+FIX_MARKER = "**Reviewer fix:**"
+KINDS = {"fix": FIX_MARKER, "question": MARKER}
+USAGE = "usage: review_notes.py review NOTES DIFF COMMIT | comment NOTES DIFF | open < THREADS_JSON"
 
 
 def new_side_lines(diff: str) -> dict[str, set[int]]:
@@ -36,17 +38,24 @@ def is_inline(note: dict, lines: dict[str, set[int]]) -> bool:
     return note.get("line") in lines.get(note.get("path"), set())
 
 
-def check_text(notes: list[dict]) -> None:
+def check_notes(notes: list[dict]) -> None:
     for i, note in enumerate(notes, start=1):
         if not (note.get("text") or "").strip():
             raise ValueError(f"reading notes: note {i} has no text")
+        kind = note.get("kind", "question")
+        if not isinstance(kind, str) or kind not in KINDS:
+            raise ValueError(f"reading notes: note {i} has unknown kind {kind}")
+
+
+def marker(note: dict) -> str:
+    return KINDS[note.get("kind", "question")]
 
 
 def review_payload(notes: list[dict], diff: str, commit: str) -> dict | None:
-    check_text(notes)
+    check_notes(notes)
     lines = new_side_lines(diff)
     comments = [
-        {"path": note["path"], "line": note["line"], "side": "RIGHT", "body": f"{MARKER} {note['text']}"}
+        {"path": note["path"], "line": note["line"], "side": "RIGHT", "body": f"{marker(note)} {note['text']}"}
         for note in notes
         if is_inline(note, lines)
     ]
@@ -62,14 +71,53 @@ def location(note: dict) -> str:
     return f"`{note['path']}:{line}` " if line else f"`{note['path']}` "
 
 
+def numbered(header: str, notes: list[dict]) -> str:
+    items = [f"{i}. {location(note)}{note['text']}" for i, note in enumerate(notes, start=1)]
+    return f"{header}\n\n" + "\n".join(items)
+
+
 def general_comment(notes: list[dict], diff: str) -> str:
-    check_text(notes)
+    check_notes(notes)
     lines = new_side_lines(diff)
     general = [note for note in notes if not is_inline(note, lines)]
-    if not general:
-        return ""
-    items = [f"{i}. {location(note)}{note['text']}" for i, note in enumerate(general, start=1)]
-    return f"{MARKER} Other notes\n\n" + "\n".join(items)
+    fixes = [note for note in general if marker(note) == FIX_MARKER]
+    questions = [note for note in general if marker(note) == MARKER]
+    sections = []
+    if fixes:
+        sections.append(numbered(f"{FIX_MARKER} Other findings", fixes))
+    if questions:
+        sections.append(numbered(f"{MARKER} Other notes", questions))
+    return "\n\n".join(sections)
+
+
+def open_fixes(threads: dict) -> list[str]:
+    try:
+        nodes = threads["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        found = []
+        for node in nodes:
+            comments = node["comments"]["nodes"]
+            if node["isResolved"] or not comments or not comments[0]["body"].startswith(FIX_MARKER):
+                continue
+            line = comments[0].get("line")
+            path = comments[0]["path"]
+            found.append(f"{node['id']} {path}:{line}" if line else f"{node['id']} {path}")
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"reading threads: {error!r}") from error
+    return found
+
+
+def run_open() -> None:
+    try:
+        threads = json.loads(sys.stdin.read())
+    except ValueError as error:
+        sys.exit(f"reading threads: {error}")
+    try:
+        found = open_fixes(threads)
+    except ValueError as error:
+        sys.exit(str(error))
+    for row in found:
+        print(row)
+    sys.exit(1 if found else 0)
 
 
 def review_output(notes: list[dict], diff: str, commit: str) -> str:
@@ -90,6 +138,8 @@ def read_inputs(notes_path: str, diff_path: str) -> tuple[list[dict], str]:
 
 def main() -> None:
     args = sys.argv[1:]
+    if args == ["open"]:
+        run_open()
     if not ((len(args) == 4 and args[0] == "review") or (len(args) == 3 and args[0] == "comment")):
         print(USAGE, file=sys.stderr)
         sys.exit(2)

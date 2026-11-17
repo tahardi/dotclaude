@@ -23,6 +23,10 @@ def code_block(value, language=None):
 CODE = {"type": "code"}
 
 
+def link(href):
+    return {"type": "link", "attrs": {"href": href}}
+
+
 class RenderTest(unittest.TestCase):
     def test_render(self):
         cases = [
@@ -65,6 +69,16 @@ class RenderTest(unittest.TestCase):
                 "```\na\n```",
             ),
             ("inline code", doc(paragraph(text("run "), text("make", CODE))), "run `make`"),
+            (
+                "link with a label",
+                doc(paragraph(text("the PR", link("https://x.example/1")))),
+                "[the PR](https://x.example/1)",
+            ),
+            (
+                "link whose text is its URL",
+                doc(paragraph(text("https://x.example", link("https://x.example")))),
+                "https://x.example",
+            ),
             (
                 "inline code whose text has backticks in a longer delimiter",
                 doc(paragraph(text("a`[x](https://evil.example)``b", CODE))),

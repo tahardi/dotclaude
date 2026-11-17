@@ -1,6 +1,7 @@
 import fnmatch
 import json
 import os
+import posixpath
 import re
 import tempfile
 import unittest
@@ -33,6 +34,15 @@ def hook_command(event, notification_type):
     )
 
 
+def reaches_xena(path):
+    if not re.match(r"^(~|~/.*|/.*)$", path) or re.search(r"[$*?\[{]", path):
+        return True
+
+    full = posixpath.normpath("/home/dev" + path[1:] if path.startswith("~") else path).lstrip("/")
+    xena = "home/dev/.xena"
+    return full == "" or full == xena or full.startswith(xena + "/") or xena.startswith(full + "/")
+
+
 class TestVmSettings(unittest.TestCase):
     def test_vm_managed(self):
         # given
@@ -56,6 +66,9 @@ class TestVmSettings(unittest.TestCase):
         ]:
             self.assertIs(sandbox[key], False, key)
         self.assertIs(sandbox["network"]["allowAllUnixSockets"], False)
+        self.assertIn("~/.local/state/maple/findings", sandbox["filesystem"]["allowWrite"])
+        for path in sandbox["filesystem"]["allowWrite"]:
+            self.assertFalse(reaches_xena(path), f"writing Xena state through {path}")
         self.assertNotIn("strictAllowlist", sandbox["network"])
         self.assertNotIn("allowManagedDomainsOnly", sandbox["network"])
         for key in [
@@ -87,7 +100,13 @@ class TestVmSettings(unittest.TestCase):
         self.assertEqual(settings["env"]["ENABLE_CLAUDEAI_MCP_SERVERS"], "false")
         for rule in deny:
             self.assertRegex(rule, r"^[A-Za-z]+\(.+\)$")
-        for rule in ["Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(git push --force*)", "Bash(git push * --force*)"]:
+        for rule in [
+            "Bash(rm -rf /*)",
+            "Bash(rm -rf ~*)",
+            "Bash(git push --force*)",
+            "Bash(git push * --force*)",
+            "Edit(//home/dev/.xena/**)",
+        ]:
             self.assertIn(rule, deny)
         self.assertEqual(set(hooks), {"UserPromptSubmit", "Stop", "Notification"})
         self.assertEqual(hooks["Notification"][0]["matcher"], "permission_prompt")
@@ -101,6 +120,38 @@ class TestVmSettings(unittest.TestCase):
         self.assertEqual(set(settings["enabledPlugins"]), {p["name"] for p in plugins})
         self.assertTrue(all(v is True for v in settings["enabledPlugins"].values()))
         self.assertEqual(marketplaces, {p["source"].removeprefix("github:") for p in plugins})
+
+    def test_reaches_xena(self):
+        # given
+        cases = [
+            ("~/Documents/code", False),
+            ("~/.cache", False),
+            ("~/.local/state/maple/findings", False),
+            ("/home/dev/.xenaother", False),
+            ("~/.xena", True),
+            ("~/.xena/", True),
+            ("~/.xena/hooks.jsonl", True),
+            ("/home/dev/.xena", True),
+            ("~", True),
+            ("~/", True),
+            ("/", True),
+            ("/home", True),
+            ("//home/dev/.xena", True),
+            ("/home//dev/.xena", True),
+            ("/home/dev/./.xena", True),
+            ("~/Documents/../.xena", True),
+            ("~dev/.xena", True),
+            ("$HOME/.xena", True),
+            ("~/.x*", True),
+            ("/home/*", True),
+            ("relative/path", True),
+        ]
+
+        # when
+        results = [(path, reaches_xena(path)) for path, _ in cases]
+
+        # then
+        self.assertEqual(results, cases)
 
     def test_vm_managed_mcp(self):
         # given

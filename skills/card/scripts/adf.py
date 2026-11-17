@@ -28,6 +28,9 @@ def text_of(node):
             return f"**{t}**"
         if "strike" in marks:
             return f"~~{t}~~"
+        href = next((m.get("attrs", {}).get("href") for m in node.get("marks", []) if m["type"] == "link"), None)
+        if href and href != t:
+            return f"[{t}]({href})"
         return t
     if node.get("type") == "hardBreak":
         return "\n"
@@ -46,7 +49,8 @@ def render(node, indent=""):
     if kind == "codeBlock":
         code = text_of(node)
         fence = backticks(code, 3)
-        return f"{indent}{fence}{label((node.get('attrs') or {}).get('language') or '')}\n{code}\n{indent}{fence}"
+        body = "\n".join(indent + row if row else row for row in code.split("\n"))
+        return f"{indent}{fence}{label((node.get('attrs') or {}).get('language') or '')}\n{body}\n{indent}{fence}"
     if kind in ("bulletList", "orderedList"):
         lines = []
         for i, item in enumerate(content, 1):

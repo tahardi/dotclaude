@@ -65,8 +65,11 @@ Any part that runs Claude can be misled, so its trust is a best effort and its l
 
 - `maple`: trusted with Taylor's decisions, merges, and starting VM sessions. Nothing limits it; it is the trusted
   base, with Xena's desktop services.
-- `desktop-settings`: trusted with keeping desktop Claude in prompt mode with the sandbox, deny rules, and network
-  allowlist. Limited by Taylor's PR review and the audit flagging any setting that allows more.
+- `desktop-settings`: trusted with keeping desktop Claude in prompt mode with the sandbox, deny rules, sandboxed
+  writes kept out of git hooks and config, and the network allowlist, which lets sessions download Jira attachments
+  from Atlassian's shared media host. Limited by Taylor's PR review and the audit flagging any setting that allows
+  more. Gap: the media host is shared by every Atlassian site, so it also accepts uploads to other sites, and
+  attachments from any Jira author reach sessions (MPL-445).
 - `vm-settings`: trusted with closing the VM's exits. Limited by the VM wall, being root-owned, the guard suite, and
   the VM settings test on every PR.
 - `instructions`: trusted with how every session behaves. Nothing enforces it; the VM wall, scoped tokens, and
@@ -111,7 +114,7 @@ command log.
 
 ## Accepted Risks
 
-None yet.
+- Allowed hosts shared by many customers, now including Atlassian's media service, let commands send data out (MPL-454 F4): GitHub already offers the same path out, so the new host adds little. Closing it means fetching attachments outside the sandbox, a bigger change.
 
 ## Severity Overrides
 

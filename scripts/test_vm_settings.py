@@ -238,6 +238,15 @@ class TestVmSettings(unittest.TestCase):
                 any(value == p or value.startswith(p + "/") for p in allow_write),
                 f"writing {name} outside allowWrite",
             )
+        git_dirs = [p for p in settings["sandbox"]["filesystem"]["allowWrite"] if p.endswith("/.git")]
+        self.assertTrue(git_dirs)
+        for git_dir in git_dirs:
+            for name in ["hooks", "config"]:
+                self.assertIn(
+                    f"{git_dir}/{name}",
+                    settings["sandbox"]["filesystem"].get("denyWrite", []),
+                    f"letting sandboxed commands write {git_dir}/{name}",
+                )
         self.assertIn("~/.cache/claude-go", settings["sandbox"]["filesystem"]["allowWrite"])
         for path in ["~/.cache/go-build", "~/go/pkg", "~/go", "~/.cache/golangci-lint"]:
             shared = path.replace("~", "/home/bear", 1)

@@ -12,6 +12,8 @@ Implement the card named in the arguments, get it green locally and in CI, and l
 **Arguments:** `$ARGUMENTS`. The first word is the card key (`[A-Z]+-\d+`). If the second word is `force`, skip the blocker check. If the second word is `close`, skip the Workflow and run only "Close" below.
 
 **Jira helper:** `python3 ~/.claude/skills/card/scripts/jira.py` with `get KEY`, `transition KEY STATUS`, `comment KEY TEXT`, `assign KEY`, `strike-blockers KEY`, `open-siblings KEY`, `update KEY [--add-labels a,b]`, `test-card PROJECT SUMMARY` (Markdown description on stdin), or `create PROJECT SUMMARY [--epic KEY] [--labels a,b] [--points N] [--blocked-by K1,K2] [--blocks K3]` (description on stdin). It reads credentials from `~/.config/jira/env`. Never print or echo that file.
+When a comment holds finding, card, or PR text, use the Write tool to save it to a new scratchpad file first and pass
+it as `"$(cat <file>)"`, so that text never goes on the command line itself.
 
 **Finding a card's PR:** always use this command, with the card's branch. Never use `--limit 1` or drop the filter:
 anyone can open a PR from a fork with the same branch name, and it must never count as the card's PR.
@@ -385,8 +387,9 @@ commit. The card's findings file is `<KEY>.json` in `$MAPLE_FINDINGS_DIR` (defau
 3. **Fix later** (`fix-later`): use the Write tool to save a description to a new scratchpad file, never a heredoc.
    Start it with the `- **Problem:**`, `- **Goal:**`, and `- **Done when:**` bullets written from the finding, then
    `## What`, `## How`, `## Impact`, and `## Defense` with the finding's text, then a link to the PR. Write the card's
-   summary yourself in plain words from the finding, with no apostrophes, quotes, backticks, or `$`. Run
-   `jira.py create <PROJECT> '<summary>' --epic <this card's epic> --labels needs-refinement,security-finding < <file>`.
+   summary yourself in plain words from the finding, and save it with the Write tool to its own new scratchpad file.
+   Run `jira.py create <PROJECT> "$(cat <summary file>)" --epic <this card's epic>
+   --labels needs-refinement,security-finding < <file>`.
    Then run `findings.py applied KEY <id> --card <new key>`.
 4. **Accept risk** (`accept-risk`) and **Not real** (`not-real`): run `findings.py applied KEY <id>` only.
 5. From the worktree, run `python3 ~/.claude/skills/card/scripts/trust_model.py apply KEY`. It records each accepted

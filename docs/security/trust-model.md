@@ -114,7 +114,7 @@ command log.
 
 ## Accepted Risks
 
-None yet.
+- Allowed hosts shared by many customers, now including Atlassian's media service, let commands send data out (MPL-454 F4): GitHub already offers the same path out, so the new host adds little. Closing it means fetching attachments outside the sandbox, a bigger change.
 
 ## Severity Overrides
 

@@ -254,4 +254,5 @@ build:
     dotclaude change and nightly; each security pass reads this model from the PR's base commit and raises any edit
     to it as a finding; the desktop hook logs every Bash command; no alerts specific to dotclaude
 accepted:
+  - {"identity": {"kind": "code", "class": "exfiltration-via-shared-host", "file": "settings/desktop.json", "hash": "c2ffbf4081f6540c"}, "title": "Allowed hosts shared by many customers, now including Atlassian's media service, let commands send data out", "reason": "GitHub already offers the same path out, so the new host adds little. Closing it means fetching attachments outside the sandbox, a bigger change.", "card": "MPL-454", "finding": "F4", "at": "2026-11-18"}
 overrides:

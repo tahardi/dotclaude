@@ -215,6 +215,7 @@ class TestVmSettings(unittest.TestCase):
             "github.com",
             "api.github.com",
             "taylorantoniohardin.atlassian.net",
+            "api.media.atlassian.com",
             "proxy.golang.org",
             "sum.golang.org",
             "vuln.go.dev",

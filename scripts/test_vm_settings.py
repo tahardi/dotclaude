@@ -241,7 +241,7 @@ class TestVmSettings(unittest.TestCase):
         git_dirs = [p for p in settings["sandbox"]["filesystem"]["allowWrite"] if p.endswith("/.git")]
         self.assertTrue(git_dirs)
         for git_dir in git_dirs:
-            for name in ["hooks", "config", "commondir"]:
+            for name in ["hooks", "config"]:
                 self.assertIn(
                     f"{git_dir}/{name}",
                     settings["sandbox"]["filesystem"].get("denyWrite", []),

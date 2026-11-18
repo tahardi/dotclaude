@@ -73,7 +73,9 @@ Any part that runs Claude can be misled, so its trust is a best effort and its l
   Maple's checks carry the weight.
 - `skills`: trusted with steering each card through the security pass and the PR without merging unapproved. Limited
   by VM tokens that cannot merge, Maple's pinned merge, decisions kept in Maple, and models read from the base commit.
-  Gap: until Xena runs, card sessions on the desktop merge PRs themselves, not pinned to the reviewed commit.
+  Gap: until Xena runs, card sessions on the desktop merge PRs themselves, not pinned to the reviewed commit. Gap:
+  applying finding decisions skips the security pass when nothing changed since the last pass reviewed the local
+  worktree, and it does not check the PR's head on GitHub.
 - `skill-scripts`: trusted with the VM tokens and with writing and filtering findings. Limited by the VM sandbox,
   narrow tokens, Maple's schema checks, decisions from Maple, and unit tests. Gap: a change that quietly drops
   findings is caught only by tests and review. Gap: until Xena runs, desktop card sessions run these scripts with

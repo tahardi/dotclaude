@@ -47,10 +47,14 @@ components:
   - id: desktop-settings
     what: The desktop settings file, linked as ~/.claude/settings.json
     trusted_with: >-
-      Keeping desktop Claude in prompt mode, with the sandbox on, no unsandboxed retries, the deny rules, and the
-      network allowlist; sandboxed Bash runs without a prompt, and gh pr merge, git branch -D, and git worktree
-      remove run outside the sandbox
-    limited_by: Taylor's review of every PR that changes it, and the audit flagging any desktop setting that allows more
+      Keeping desktop Claude in prompt mode, with the sandbox on, no unsandboxed retries, the deny rules, sandboxed
+      writes kept out of git hooks and config, and the network allowlist, which lets sandboxed commands download Jira
+      attachments from Atlassian's shared media host; sandboxed Bash runs without a prompt, and gh pr merge,
+      git branch -D, and git worktree remove run outside the sandbox
+    limited_by: >-
+      Taylor's review of every PR that changes it, and the audit flagging any desktop setting that allows more. Gap:
+      the media host is shared by every Atlassian site, so it also accepts uploads to other sites, and attachments
+      from any Jira author reach sessions (MPL-445)
   - id: vm-settings
     what: The VM managed settings and MCP list, installed root-owned in /etc/claude-code
     trusted_with: >-

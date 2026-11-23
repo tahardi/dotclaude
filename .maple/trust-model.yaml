@@ -247,8 +247,9 @@ build:
     nothing updates the gitleaks pin
   deployed: >-
     install.sh desktop links ~/.claude to the main checkout, so changes go live at Taylor's git pull; the VM build
-    runs install.sh vm, which copies files root-owned into /etc/claude-code, so changes reach the VM only through a
-    merged PR and a reinstall. Gap: the installed commit is not recorded on either side
+    runs install.sh vm, which copies files root-owned into /etc/claude-code and points the VM user's own
+    ~/.claude/skills at that root-owned copy, so changes reach the VM only through a merged PR and a reinstall.
+    Gap: the installed commit is not recorded on either side
   monitored: >-
     /audit and xena audit check desktop config drift and plugin and MCP drift; the guard suite reruns after any
     dotclaude change and nightly; each security pass reads this model from the PR's base commit and raises any edit

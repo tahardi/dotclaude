@@ -139,12 +139,15 @@ test_vm_links_user_skills() {
 	[[ -f "$vm_home/.claude/skills/card/scripts/jira.py" && -r "$vm_home/.claude/skills/card/scripts/jira.py" ]] ||
 		{ fail "${FUNCNAME[0]}" "jira.py is not readable through the link"; return; }
 	[[ "$(stat -c %a "$vm_home/.claude")" == 700 ]] || { fail "${FUNCNAME[0]}" ".claude mode is not 700"; return; }
+	[[ "$(stat -c %U:%G "$vm_home/.claude")" == "$(stat -c %U:%G "$vm_home")" ]] ||
+		{ fail "${FUNCNAME[0]}" ".claude owner differs from the home folder's"; return; }
 
 	MANAGED_DIR=$managed_dir VM_HOME=$vm_home "$repo/install.sh" vm >/dev/null
 
 	[[ "$(readlink "$vm_home/.claude/skills")" == "$managed_dir/.claude/skills" ]] ||
 		{ fail "${FUNCNAME[0]}" "skills link changed on re-run"; return; }
-	[[ ! -e "$managed_dir/.claude/skills/skills" ]] || { fail "${FUNCNAME[0]}" "re-run nested a link in the target"; return; }
+	[[ ! -e "$managed_dir/.claude/skills/skills" ]] ||
+		{ fail "${FUNCNAME[0]}" "re-run nested a link in the target"; return; }
 
 	echo "PASS ${FUNCNAME[0]}"
 }

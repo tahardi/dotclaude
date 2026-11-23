@@ -106,8 +106,10 @@ class TestVmSettings(unittest.TestCase):
             "Bash(git push --force*)",
             "Bash(git push * --force*)",
             "Edit(//home/dev/.xena/**)",
+            "Edit(//home/dev/.config/xena/**)",
         ]:
             self.assertIn(rule, deny)
+        self.assertNotIn("Read(//home/dev/.config/xena/**)", deny)
         self.assertEqual(set(hooks), {"UserPromptSubmit", "Stop", "Notification"})
         self.assertEqual(hooks["Notification"][0]["matcher"], "permission_prompt")
         for event, notification_type in [

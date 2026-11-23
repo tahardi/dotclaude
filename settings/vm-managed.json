@@ -138,7 +138,6 @@
       "Bash(crontab *)",
       "Bash(systemctl *)",
       "Bash(at *)",
-      "Read(//home/dev/.config/xena/**)",
       "Read(//home/dev/.ssh/**)",
       "Read(//home/dev/.claude/.credentials.json)",
       "Read(//home/dev/.claude-mem/settings.json)",

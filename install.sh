@@ -5,6 +5,7 @@ repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 claude_dir=${CLAUDE_DIR:-$HOME/.claude}
 managed_dir=${MANAGED_DIR:-/etc/claude-code}
 go_cache_dir=${GO_CACHE_DIR:-$HOME/.cache/claude-go}
+vm_home=${VM_HOME:-/home/dev}
 backup_dir=$claude_dir/dotclaude-backup/$(date +%Y%m%d%H%M%S)
 skills=(audit card learn project refine repo-security-review retro)
 
@@ -52,6 +53,9 @@ vm() {
 			install -D -m 0644 "$repo/skills/$skill/$file" "$managed_dir/.claude/skills/$skill/$file"
 		done < <(cd "$repo/skills/$skill" && find . -type f -not -path '*/__pycache__/*' -printf '%P\0')
 	done
+
+	install -d -o "$(stat -c %U "$vm_home")" -g "$(stat -c %G "$vm_home")" -m 0700 "$vm_home/.claude"
+	ln -sfn "$managed_dir/.claude/skills" "$vm_home/.claude/skills"
 }
 
 case "${1:-}" in

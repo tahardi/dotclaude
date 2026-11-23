@@ -146,6 +146,7 @@
       "Edit(//home/dev/.claude/settings.json)",
       "Edit(//home/dev/.claude/settings.local.json)",
       "Edit(//home/dev/.claude/hooks/**)",
+      "Edit(//home/dev/.claude/skills/**)",
       "Edit(//home/dev/.claude-mem/settings.json)",
       "Edit(//home/dev/.config/xena/**)",
       "Edit(//home/dev/.xena/**)",

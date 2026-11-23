@@ -91,14 +91,15 @@ test_desktop_fresh_dir() {
 test_vm_installs_managed_files() {
 	local managed_dir=$tmp_root/vm/etc/claude-code
 	mkdir -p "$managed_dir"
+	mkdir -p "$tmp_root/vm/home/dev"
 	echo old >"$managed_dir/managed-settings.json"
 	chmod 600 "$managed_dir/managed-settings.json"
-	MANAGED_DIR=$managed_dir "$repo/install.sh" vm >/dev/null
+	MANAGED_DIR=$managed_dir VM_HOME=$tmp_root/vm/home/dev "$repo/install.sh" vm >/dev/null
 
 	local pair src dst
 	mkdir -p "$managed_dir/.claude/skills/card"
 	echo stale >"$managed_dir/.claude/skills/card/stale.md"
-	MANAGED_DIR=$managed_dir "$repo/install.sh" vm >/dev/null
+	MANAGED_DIR=$managed_dir VM_HOME=$tmp_root/vm/home/dev "$repo/install.sh" vm >/dev/null
 
 	for pair in \
 		"settings/vm-managed.json:managed-settings.json" \
@@ -128,6 +129,26 @@ test_vm_installs_managed_files() {
 	echo "PASS ${FUNCNAME[0]}"
 }
 
+test_vm_links_user_skills() {
+	local managed_dir=$tmp_root/link/etc/claude-code vm_home=$tmp_root/link/home/dev
+	mkdir -p "$vm_home"
+	MANAGED_DIR=$managed_dir VM_HOME=$vm_home "$repo/install.sh" vm >/dev/null
+
+	[[ "$(readlink "$vm_home/.claude/skills")" == "$managed_dir/.claude/skills" ]] ||
+		{ fail "${FUNCNAME[0]}" "skills folder does not link to the managed copy"; return; }
+	[[ -f "$vm_home/.claude/skills/card/scripts/jira.py" && -r "$vm_home/.claude/skills/card/scripts/jira.py" ]] ||
+		{ fail "${FUNCNAME[0]}" "jira.py is not readable through the link"; return; }
+	[[ "$(stat -c %a "$vm_home/.claude")" == 700 ]] || { fail "${FUNCNAME[0]}" ".claude mode is not 700"; return; }
+
+	MANAGED_DIR=$managed_dir VM_HOME=$vm_home "$repo/install.sh" vm >/dev/null
+
+	[[ "$(readlink "$vm_home/.claude/skills")" == "$managed_dir/.claude/skills" ]] ||
+		{ fail "${FUNCNAME[0]}" "skills link changed on re-run"; return; }
+	[[ ! -e "$managed_dir/.claude/skills/skills" ]] || { fail "${FUNCNAME[0]}" "re-run nested a link in the target"; return; }
+
+	echo "PASS ${FUNCNAME[0]}"
+}
+
 test_unknown_target() {
 	setup
 
@@ -147,5 +168,6 @@ test_desktop_backs_up_and_keeps_other_skills
 test_desktop_is_idempotent
 test_desktop_fresh_dir
 test_vm_installs_managed_files
+test_vm_links_user_skills
 test_unknown_target
 exit "$((failures > 0))"

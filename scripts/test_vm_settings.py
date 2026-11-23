@@ -108,6 +108,12 @@ class TestVmSettings(unittest.TestCase):
             "Edit(//home/dev/.xena/**)",
             "Edit(//home/dev/.config/xena/**)",
             "Edit(//home/dev/.claude/skills/**)",
+            "Edit(//home/dev/.claude/CLAUDE.md)",
+            "Edit(//home/dev/.claude/agents/**)",
+            "Edit(//home/dev/.claude/commands/**)",
+            "Edit(//home/dev/.claude/rules/**)",
+            "Edit(//home/dev/.claude/output-styles/**)",
+            "Edit(//home/dev/.claude/plugins/**)",
         ]:
             self.assertIn(rule, deny)
         self.assertNotIn("Read(//home/dev/.config/xena/**)", deny)
